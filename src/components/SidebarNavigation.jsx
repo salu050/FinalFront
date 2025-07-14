@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   FaTachometerAlt,
@@ -15,7 +15,6 @@ import {
 import logo from './logo.jfif';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-// Modern gradient and glassmorphism styles
 const sidebarStyle = {
   width: 90,
   minWidth: 90,
@@ -27,6 +26,11 @@ const sidebarStyle = {
   boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
   borderRight: '1px solid rgba(255,255,255,0.1)',
   backdropFilter: 'blur(8px)',
+  minHeight: '100vh',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'space-between'
 };
 
 const iconBoxStyle = (active) => ({
@@ -34,26 +38,53 @@ const iconBoxStyle = (active) => ({
   borderRadius: 16,
   padding: 10,
   marginBottom: 8,
-  transition: 'background 0.2s',
+  transition: 'background 0.2s, box-shadow 0.2s',
   boxShadow: active ? '0 2px 8px #dbeafe' : 'none',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'center'
+  justifyContent: 'center',
+  position: 'relative'
 });
 
-const SidebarNavigation = ({ hasPaid, onSignOut }) => {
+const SidebarNavigation = ({ onSignOut }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [showSettings, setShowSettings] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
-  // Change password modal state
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [changeMsg, setChangeMsg] = useState('');
+  // Payment and user logic
+  const [paymentStatus, setPaymentStatus] = useState('');
+  const [checkingPayment, setCheckingPayment] = useState(true);
 
-  // Toggle dark mode (for demo, you can expand this)
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || user.role === 'ADMIN') {
+      setPaymentStatus('');
+      setCheckingPayment(false);
+      return;
+    }
+    setCheckingPayment(true);
+    fetch(`http://localhost:8080/api/payments/user/${user.id}`)
+      .then(res => res.ok ? res.json() : [])
+      .then((data) => {
+        if (!Array.isArray(data) || !data.length) {
+          setPaymentStatus('NONE');
+          setCheckingPayment(false);
+          return;
+        }
+        const latest = data
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+        setPaymentStatus(latest.status);
+        setCheckingPayment(false);
+      })
+      .catch(() => {
+        setPaymentStatus('NONE');
+        setCheckingPayment(false);
+      });
+  }, []);
+
+  // Toggle dark mode
   const handleToggleTheme = () => {
     setDarkMode((d) => !d);
     document.body.style.background = darkMode
@@ -63,34 +94,64 @@ const SidebarNavigation = ({ hasPaid, onSignOut }) => {
 
   const handleSignOut = () => {
     if (onSignOut) onSignOut();
+    localStorage.removeItem('user');
     navigate('/login');
-  };
-
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setChangeMsg('');
-    try {
-      const response = await fetch('http://localhost:8080/api/users/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldPassword, newPassword }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to change password');
-      }
-      setChangeMsg('Password changed successfully!');
-      setOldPassword('');
-      setNewPassword('');
-    } catch (err) {
-      setChangeMsg(err.message);
-    }
   };
 
   const user = JSON.parse(localStorage.getItem('user'));
   const isAdmin = user && user.role === 'ADMIN';
 
-  // Navigation items
+  // Application access nav logic
+  let applicationNav = null;
+  if (!isAdmin) {
+    if (checkingPayment) {
+      applicationNav = {
+        to: "#",
+        icon: <FaWpforms size={28} />,
+        label: 'Application',
+        active: location.pathname.startsWith('/application'),
+        disabled: true,
+        tooltip: "Checking payment status..."
+      };
+    } else if (paymentStatus === 'APPROVED') {
+      applicationNav = {
+        to: '/application',
+        icon: <FaWpforms size={28} />,
+        label: 'Application',
+        active: location.pathname.startsWith('/application'),
+        disabled: false,
+        tooltip: "Start or update your application"
+      };
+    } else if (paymentStatus === 'PENDING') {
+      applicationNav = {
+        to: '#',
+        icon: <FaWpforms size={28} />,
+        label: 'Application',
+        active: location.pathname.startsWith('/application'),
+        disabled: true,
+        tooltip: "Your payment is pending admin approval"
+      };
+    } else if (paymentStatus === 'REJECTED') {
+      applicationNav = {
+        to: '#',
+        icon: <FaWpforms size={28} />,
+        label: 'Application',
+        active: location.pathname.startsWith('/application'),
+        disabled: true,
+        tooltip: "Your payment was rejected. Please make a new payment"
+      };
+    } else {
+      applicationNav = {
+        to: '#',
+        icon: <FaWpforms size={28} />,
+        label: 'Application',
+        active: location.pathname.startsWith('/application'),
+        disabled: true,
+        tooltip: "Please complete payment before applying"
+      };
+    }
+  }
+
   const navItems = [
     {
       to: '/dashboard',
@@ -98,14 +159,7 @@ const SidebarNavigation = ({ hasPaid, onSignOut }) => {
       label: 'Dashboard',
       active: location.pathname === '/dashboard'
     },
-    {
-      to: hasPaid ? '/application' : '#',
-      icon: <FaWpforms size={28} />,
-      label: 'Application',
-      active: location.pathname === '/application',
-      disabled: !hasPaid,
-      tooltip: !hasPaid ? "Please complete payment before applying." : "Application Form"
-    },
+    applicationNav,
     !isAdmin && {
       to: '/payment',
       icon: <FaMoneyCheckAlt size={28} />,
@@ -127,9 +181,9 @@ const SidebarNavigation = ({ hasPaid, onSignOut }) => {
   ].filter(Boolean);
 
   return (
-    <nav style={sidebarStyle} className="text-white vh-100 p-3 d-flex flex-column align-items-center justify-content-between">
+    <nav style={sidebarStyle} className="sidebar-nav">
       <div>
-        <div className="text-center mb-4">
+        <div className="text-center mb-4 mt-2">
           <img
             src={logo}
             alt="Logo"
@@ -145,21 +199,33 @@ const SidebarNavigation = ({ hasPaid, onSignOut }) => {
         <ul className="nav flex-column align-items-center" style={{ width: '100%' }}>
           {navItems.map((item, idx) => (
             <li key={idx} style={{ width: '100%' }}>
-              <Link
-                to={item.to}
-                className={`nav-link text-white d-flex flex-column align-items-center`}
-                style={{
-                  ...iconBoxStyle(item.active),
-                  opacity: item.disabled ? 0.5 : 1,
-                  pointerEvents: item.disabled ? 'none' : 'auto'
-                }}
-                tabIndex={item.disabled ? -1 : 0}
-                aria-disabled={item.disabled}
-                title={item.tooltip || item.label}
-              >
-                {item.icon}
-                <span className="small mt-1" style={{ fontSize: 11 }}>{item.label}</span>
-              </Link>
+              {item.disabled ? (
+                <span
+                  className={`nav-link text-white d-flex flex-column align-items-center`}
+                  style={{
+                    ...iconBoxStyle(item.active),
+                    opacity: 0.5,
+                    pointerEvents: 'none'
+                  }}
+                  tabIndex={-1}
+                  aria-disabled={true}
+                  title={item.tooltip || item.label}
+                >
+                  {item.icon}
+                  <span className="small mt-1" style={{ fontSize: 11 }}>{item.label}</span>
+                </span>
+              ) : (
+                <Link
+                  to={item.to}
+                  className={`nav-link text-white d-flex flex-column align-items-center`}
+                  style={iconBoxStyle(item.active)}
+                  tabIndex={0}
+                  title={item.tooltip || item.label}
+                >
+                  {item.icon}
+                  <span className="small mt-1" style={{ fontSize: 11 }}>{item.label}</span>
+                </Link>
+              )}
             </li>
           ))}
           <li style={{ width: '100%' }}>
@@ -175,7 +241,7 @@ const SidebarNavigation = ({ hasPaid, onSignOut }) => {
           </li>
         </ul>
       </div>
-      <div className="d-flex flex-column align-items-center gap-3">
+      <div className="d-flex flex-column align-items-center gap-3 mb-3">
         <button
           className="nav-link text-white bg-transparent border-0 d-flex flex-column align-items-center"
           style={iconBoxStyle(false)}
@@ -195,6 +261,7 @@ const SidebarNavigation = ({ hasPaid, onSignOut }) => {
           <span className="small mt-1" style={{ fontSize: 11 }}>Sign Out</span>
         </button>
       </div>
+      {/* Optionally add a settings modal or drawer here */}
     </nav>
   );
 };

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import ApplicationDetails from './ApplicationDetails';
+// Import the configured axios instance for authenticated API calls
+import axios from '../api/axiosConfig.jsx'; // Ensure this path is correct
 
 // Avatar utility: use initials from username/email
 const getAvatar = (username) =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(username || 'User')}&background=random`;
 
-function AdminDashboard() {
+// AdminDashboard component now accepts a navigation prop
+function AdminDashboard({ onNavigateToLogin }) { // Added onNavigateToLogin prop
   const [payments, setPayments] = useState([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
@@ -15,16 +17,36 @@ function AdminDashboard() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
 
-  // Metrics
+  // Placeholder for logo image
+  const logoUrl = "https://placehold.co/90x90/6366f1/ffffff?text=ADMIN";
+
+  // Metrics (derived from filtered payments)
   const totalPayments = payments.length;
   const totalApproved = payments.filter(p => p.status === "APPROVED").length;
   const totalPending = payments.filter(p => p.status === "PENDING").length;
   const totalRejected = payments.filter(p => p.status === "REJECTED").length;
 
+  // --- Dynamic CSS Injection for Bootstrap and Custom Styles ---
   useEffect(() => {
+    // Inject Bootstrap CSS
+    const bootstrapLink = document.createElement('link');
+    bootstrapLink.href = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css';
+    bootstrapLink.rel = 'stylesheet';
+    bootstrapLink.integrity = 'sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM';
+    bootstrapLink.crossOrigin = 'anonymous';
+    document.head.appendChild(bootstrapLink);
+
+    // Inject Bootstrap Icons CSS (for bi-person-circle, bi-credit-card, etc.)
+    const bootstrapIconsLink = document.createElement('link');
+    bootstrapIconsLink.href = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css';
+    bootstrapIconsLink.rel = 'stylesheet';
+    document.head.appendChild(bootstrapIconsLink);
+
+    // Inject custom styles
     const id = "admin-dashboard-modern-style";
-    if (!document.getElementById(id)) {
-      const style = document.createElement("style");
+    let style = document.getElementById(id);
+    if (!style) {
+      style = document.createElement("style");
       style.id = id;
       style.innerHTML = `
         .dashboard-card {
@@ -105,46 +127,67 @@ function AdminDashboard() {
       `;
       document.head.appendChild(style);
     }
+
+    // Cleanup function
+    return () => {
+      document.head.removeChild(bootstrapLink);
+      document.head.removeChild(bootstrapIconsLink); // Clean up Bootstrap Icons
+      if (document.getElementById(id)) {
+        document.head.removeChild(document.getElementById(id));
+      }
+    };
   }, []);
 
+  // --- Fetch Payments from Backend ---
   useEffect(() => {
     const fetchPayments = async () => {
       setLoadingPayments(true);
       setError(null);
+      // axiosConfig automatically handles getting the token from localStorage
+      // and attaching it to the Authorization header.
+
       try {
-        const response = await fetch('http://localhost:8080/api/payments');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setPayments(data);
+        // Ensure your backend's /api/payments endpoint returns payment data
+        // with nested user details (e.g., username, id) if you want to display them.
+        // Otherwise, you'll only have payment.userId
+        const response = await axios.get('/payments'); // Use axios instance
+
+        setPayments(response.data); // Axios puts response data in .data
       } catch (err) {
-        setError(err.message);
+        console.error("Error fetching payments:", err);
+        const errorMessage = err.response?.data?.message || err.message || 'An unexpected error occurred.';
+        setError(errorMessage);
+
+        // If 401 or 403, redirect to login
+        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+          if (onNavigateToLogin) {
+            onNavigateToLogin();
+          }
+        }
       } finally {
         setLoadingPayments(false);
       }
     };
 
     fetchPayments();
-  }, []);
+  }, [onNavigateToLogin]); // Dependency on onNavigateToLogin prop
 
-  // Approve/Reject payment by paymentId and update with server response
+  // --- Approve/Reject Payment Actions ---
   const handlePaymentAction = async (paymentId, action) => {
     setActionMsg('');
+    setError(null); // Clear previous errors
+
     try {
       let endpoint = '';
-      let fetchOptions = { method: 'POST' };
       if (action === 'approve') {
-        endpoint = `http://localhost:8080/api/admin/approve-payment?paymentId=${paymentId}`;
+        endpoint = `/admin/approve-payment?paymentId=${paymentId}`;
       } else {
-        endpoint = `http://localhost:8080/api/admin/reject-payment?paymentId=${paymentId}`;
+        endpoint = `/admin/reject-payment?paymentId=${paymentId}`;
       }
-      const response = await fetch(endpoint, fetchOptions);
-      if (!response.ok) {
-        let text = await response.text();
-        throw new Error(text || `Failed to ${action} payment`);
-      }
-      const updatedPayment = await response.json();
+
+      const response = await axios.post(endpoint); // Use axios instance
+
+      const updatedPayment = response.data; // Axios puts response data in .data
       setPayments(prevPayments =>
         prevPayments.map(payment =>
           payment.id === paymentId ? { ...payment, status: updatedPayment.status } : payment
@@ -152,7 +195,16 @@ function AdminDashboard() {
       );
       setActionMsg(`Payment ${action}d successfully!`);
     } catch (err) {
-      setActionMsg(err.message);
+      console.error(`Error ${action}ing payment:`, err);
+      const errorMessage = err.response?.data?.message || err.message || `Failed to ${action} payment.`;
+      setActionMsg(errorMessage);
+
+      // If 401 or 403, redirect to login
+      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+        if (onNavigateToLogin) {
+          onNavigateToLogin();
+        }
+      }
     }
   };
 
@@ -175,9 +227,11 @@ function AdminDashboard() {
     .filter((p) =>
       (filterStatus === 'ALL' || p.status === filterStatus) &&
       (
+        // Assuming p.user?.username and p.controlNumber exist
+        // If p.user is not available from backend, this will need adjustment
         [
-          p.user?.username,
-          p.user?.id,
+          p.user?.username, // Check if user object and username exist
+          p.id, // Search by payment ID
           p.controlNumber
         ].join(' ').toLowerCase().includes(search.toLowerCase())
       )
@@ -190,7 +244,7 @@ function AdminDashboard() {
         const sA = a.status || '', sB = b.status || '';
         return sortDir === 'desc' ? sB.localeCompare(sA) : sA.localeCompare(sB);
       } else if (sortBy === 'username') {
-        const nA = a.user?.username || '', nB = b.user?.username || '';
+        const nA = a.user?.username || '', nB = b.user?.username || ''; // Check for user object
         return sortDir === 'desc' ? nB.localeCompare(nA) : nA.localeCompare(nB);
       }
       return 0;
@@ -236,6 +290,7 @@ function AdminDashboard() {
         <div></div>
         <div>
           <span className="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center" style={{width: 36, height: 36}}>
+            {/* Using a simple icon or placeholder for user avatar */}
             <i className="bi bi-person-circle" style={{fontSize: 24}}></i>
           </span>
         </div>
@@ -265,6 +320,9 @@ function AdminDashboard() {
       {error && (
         <div className="alert alert-danger mb-4">
           Error loading payments: {error}
+          {error.includes("Unauthorized") && (
+            <button className="btn btn-sm btn-light ms-3" onClick={onNavigateToLogin}>Login</button>
+          )}
         </div>
       )}
 
@@ -367,15 +425,15 @@ function AdminDashboard() {
                       {/* User column: Only avatar now */}
                       <td>
                         <img
-                          src={getAvatar(payment.user?.username)}
-                          alt={payment.user?.username}
+                          src={getAvatar(payment.user?.username)} // Assumes payment.user.username exists
+                          alt={payment.user?.username || 'User'}
                           className="avatar-img"
-                          title={payment.user?.username}
+                          title={payment.user?.username || 'User'}
                         />
                       </td>
                       {/* Username/email column */}
                       <td>
-                        <span className="fw-semibold">{payment.user?.username || '-'}</span>
+                        <span className="fw-semibold">{payment.user?.username || '-'}</span> {/* Assumes payment.user.username exists */}
                       </td>
                       <td>
                         <span className="badge bg-primary fs-6">
@@ -422,10 +480,11 @@ function AdminDashboard() {
         )}
       </div>
 
-      {/* Applications Table */}
-      <div className="card shadow-sm p-4 mb-5 dashboard-card">
+      {/* Applications Table - Assuming ApplicationDetails is a separate component */}
+      {/* You might need to pass data or props to ApplicationDetails if it also needs backend data */}
+      {/* <div className="card shadow-sm p-4 mb-5 dashboard-card">
         <ApplicationDetails />
-      </div>
+      </div> */}
 
       <footer className="text-center text-secondary mt-4 pb-2 small">
         <span>

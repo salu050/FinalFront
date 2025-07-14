@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import logo from './logo.jfif';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import { useNavigate } from 'react-router-dom';
 import {
   FaUser,
   FaLock,
@@ -128,7 +125,8 @@ function useTyping(text, speed = 55) {
 }
 
 // ---- MAIN COMPONENT ----
-const Register = () => {
+// Register component now accepts onAuthSuccess prop for navigation
+const Register = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
@@ -153,7 +151,24 @@ const Register = () => {
   const [cooldownUntil, setCooldownUntil] = useState(null);
   const [cooldownLeft, setCooldownLeft] = useState(0);
 
-  const navigate = useNavigate();
+  // Placeholder URLs for images and dynamic CSS injection
+  const logoUrl = "https://placehold.co/100x100/6366f1/ffffff?text=LOGO"; // Placeholder for logo.jfif
+
+  useEffect(() => {
+    // Dynamically inject Bootstrap CSS link
+    const bootstrapLink = document.createElement('link');
+    bootstrapLink.href = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css';
+    bootstrapLink.rel = 'stylesheet';
+    bootstrapLink.integrity = 'sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM';
+    bootstrapLink.crossOrigin = 'anonymous';
+    document.head.appendChild(bootstrapLink);
+
+    // Cleanup function to remove the link when the component unmounts
+    return () => {
+      document.head.removeChild(bootstrapLink);
+    };
+  }, []); // Empty dependency array ensures this runs once on mount and cleans up on unmount
+
 
   // ---- Parallax for bubbles ----
   useEffect(() => {
@@ -274,7 +289,7 @@ const Register = () => {
         : {
             username: form.username,
             password: form.password,
-            role: "STUDENT"
+            role: "STUDENT" // Explicitly send the role for new registrations
           };
 
       const response = await fetch(url, {
@@ -299,7 +314,8 @@ const Register = () => {
             setError(`Please enter valid username or password. Attempts left: ${3 - nextAttempt}`);
           }
         } else {
-          setError('Registration failed');
+          const errorData = await response.json();
+          setError(errorData.message || 'Registration failed');
         }
         setIsLoading(false);
         return;
@@ -310,7 +326,15 @@ const Register = () => {
       localStorage.removeItem('loginCooldownUntil');
 
       const data = await response.json();
+      // localStorage.setItem('user', JSON.stringify(data)); // Handled by onAuthSuccess
+
+      // If backend returns a token, store it
+      if (data.token) {
+          localStorage.setItem('jwtToken', data.token);
+      }
+      // Store the entire user data object for client-side access to role, hasPaidApplicationFee etc.
       localStorage.setItem('user', JSON.stringify(data));
+
       clearUserFields();
 
       setSuccessMorph(true);
@@ -325,34 +349,24 @@ const Register = () => {
         confettiPop();
         setTimeout(() => setShowWelcome(false), 1700);
         setTimeout(() => setShowRocket(false), 1200);
-        setTimeout(() => {
-          if (data.role === 'ADMIN') {
-            navigate('/admin');
-          } else if (data.role === 'STUDENT') {
-            if (data.isNew) {
-              navigate('/payment');
-            } else {
-              navigate('/dashboard');
-            }
-          } else if (data.role === 'MINISTRY') {
-            navigate('/ministry');
-          } else {
-            navigate('/dashboard');
-          }
-        }, 1150);
+        // IMMEDIATELY call onAuthSuccess for navigation
+        if (onAuthSuccess) {
+          onAuthSuccess(data);
+        }
       } else {
         setSuccess('Account created successfully!');
         setShowToast(true);
         confettiPop();
         setTimeout(() => {
-          setIsLogin(true);
+          setIsLogin(true); // After registration, switch to login view
           setSuccess('');
           setShowToast(false);
           setSuccessMorph(false);
         }, 1500);
       }
     } catch (err) {
-      setError(err.message);
+      console.error("Submission error:", err);
+      setError(err.message || 'An unexpected error occurred.');
     }
     setIsLoading(false);
   };
@@ -366,12 +380,16 @@ const Register = () => {
       return;
     }
     setIsLoading(true);
+    
+    // Simulate backend email verification delay
     setResetMsg('Wait for verification in your email.');
     setTimeout(() => {
-      setShowReset(true);
-      setIsLoading(false);
+        setShowReset('reset'); // Change 'request' to 'reset' stage
+        setIsLoading(false);
+        setResetMsg(''); // Clear the message to prepare for new password entry
     }, 1500);
   };
+
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setResetMsg('');
@@ -536,7 +554,7 @@ const Register = () => {
         style={{ minHeight: '100vh', zIndex: 2, position: 'relative' }}>
         <div className="card border-0 shadow-lg p-4 w-100" style={glassDarkStyle}>
           <div className="text-center mb-4">
-            <img src={logo} alt="Logo" style={{ height: '100px', borderRadius: '50%', boxShadow: '0 4px 16px #dbeafe' }} />
+            <img src={logoUrl} alt="Logo" style={{ height: '100px', borderRadius: '50%', boxShadow: '0 4px 16px #dbeafe' }} />
             <h2 className="mt-3 fw-bold" style={{
               letterSpacing: 1,
               background: 'linear-gradient(90deg, #6366f1, #06b6d4, #43e97b, #fa8bff)',
@@ -751,6 +769,8 @@ const Register = () => {
                           return;
                         }
                         setResetMsg('Wait for verification in your email.');
+                        // This timeout simulates email sending and then switches to the reset form.
+                        // In a real app, this would be triggered by a successful backend response.
                         setTimeout(() => setShowReset('reset'), 1500);
                       }
                     : undefined
