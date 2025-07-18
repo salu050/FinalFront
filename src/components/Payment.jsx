@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from '../api/axiosConfig.jsx'; // Corrected: Import configured axios instance
+import axios from '../api/axiosConfig.jsx'; // IMPORTANT: Use your configured axios instance
 
 const PAYMENT_AMOUNT = 10000; // Set your fee here
 
@@ -9,7 +9,7 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
     const [paid, setPaid] = useState(false); // True if payment initiated/approved
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false); // For payment generation button
-    const [paymentStatus, setPaymentStatus] = useState(''); // PENDING, APPROVED, REJECTED
+    const [paymentStatus, setPaymentStatus] = useState(''); // PENDING, APPROVED, REJECTED, or empty for not initiated
     const [isApproved, setIsApproved] = useState(false); // True if payment is APPROVED
     const [loadingPayments, setLoadingPayments] = useState(true); // For initial status check
     const [copied, setCopied] = useState(false);
@@ -116,43 +116,38 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
             document.head.appendChild(style);
         }
 
-        // Cleanup function
+        // Cleanup function to remove injected styles and links when component unmounts
         return () => {
             document.head.removeChild(bootstrapLink);
-            document.head.removeChild(fontAwesomeLink); // Remove Font Awesome link too
+            document.head.removeChild(fontAwesomeLink);
             if (document.getElementById(id)) {
                 document.head.removeChild(document.getElementById(id));
             }
         };
     }, []);
 
-    // Poll payment status from the backend
+    // Effect to poll payment status from the backend
     useEffect(() => {
         const verifyPayment = async () => {
+            // IMPORTANT: Only proceed if userDetails are loaded and valid
             if (!userDetails || !userDetails.id) {
                 setLoadingPayments(false);
-                setError('User details missing. Please login again.');
-                if (onNavigateToLogin) onNavigateToLogin();
-                return;
+                return; // Do not make API calls if user is not authenticated
             }
 
             try {
-                // Call the /api/payments/me/status endpoint which returns a boolean
-                const response = await axios.get(`/payments/me/status`); // Use configured axios
-                
-                const hasPaidApplicationFee = response.data; // Directly get the boolean
+                const response = await axios.get(`/payments/me/status`);
+                const hasPaidApplicationFee = response.data;
 
                 if (hasPaidApplicationFee) {
                     setPaid(true);
                     setIsApproved(true);
                     setPaymentStatus('APPROVED');
-                    // Update parent App.jsx's userDetails state
-                    if (onAuthSuccess) {
+                    if (onAuthSuccess && userDetails.hasPaidApplicationFee !== true) {
                         onAuthSuccess({ ...userDetails, hasPaidApplicationFee: true });
                     }
                 } else {
-                    // If not approved, check for pending payments
-                    const paymentsResponse = await axios.get(`/payments/user/${userDetails.id}`); // Use configured axios
+                    const paymentsResponse = await axios.get(`/payments/user/${userDetails.id}`);
                     const payments = paymentsResponse.data;
                     const pendingPayment = payments.find(p => p.status === 'PENDING');
                     const rejectedPayment = payments.find(p => p.status === 'REJECTED');
@@ -167,89 +162,112 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
                         setIsApproved(false);
                         setControlNumber('');
                         setPaymentStatus('REJECTED');
+                        setError('Your previous payment was rejected. Please generate a new control number.');
                     } else {
-                        // No approved, no pending, no rejected found. User needs to generate.
                         setPaid(false);
                         setIsApproved(false);
                         setControlNumber('');
                         setPaymentStatus('');
                     }
-                    // Update parent App.jsx's userDetails state if it was false
-                    if (onAuthSuccess && userDetails.hasPaidApplicationFee !== hasPaidApplicationFee) {
-                        onAuthSuccess({ ...userDetails, hasPaidApplicationFee: hasPaidApplicationFee });
+                    if (onAuthSuccess && userDetails.hasPaidApplicationFee !== false) {
+                        onAuthSuccess({ ...userDetails, hasPaidApplicationFee: false });
                     }
                 }
-            } catch (error) {
-                console.error("Failed to verify payment status:", error);
-                setError('Failed to verify payment status. Please try again.');
+            } catch (err) {
+                console.error("Failed to verify payment status:", err);
+                // The axios interceptor handles 401/403. For other errors, show message.
+                setError('Failed to load payment status. Please try again.');
                 setPaid(false);
                 setIsApproved(false);
                 setControlNumber('');
                 setPaymentStatus('');
-                // If there's an auth error, axiosConfig interceptor should handle redirect
             } finally {
                 setLoadingPayments(false);
             }
         };
 
-        // Initial fetch and then poll every 5 seconds
-        verifyPayment();
-        const interval = setInterval(verifyPayment, 5000);
-        return () => clearInterval(interval); // Cleanup on unmount
-    }, [userDetails, onNavigateToLogin, onAuthSuccess]); // Dependencies: userDetails, onNavigateToLogin, onAuthSuccess
+        // Poll only if userDetails are available
+        if (userDetails && userDetails.id) {
+            verifyPayment();
+            const interval = setInterval(verifyPayment, 5000);
+            return () => clearInterval(interval);
+        } else {
+            // If userDetails are not available, stop loading and don't poll
+            setLoadingPayments(false);
+        }
+    }, [userDetails, onAuthSuccess]); // Dependencies: userDetails and onAuthSuccess
 
-    // Create payment request
+    // Handles generating a new payment request
     const handleConfirmPayment = async () => {
         setError('');
         setLoading(true);
         if (!userDetails || !userDetails.id) {
-            setError("User not found or not authenticated. Please login again.");
+            setError("User details missing. Please login again.");
             setLoading(false);
-            if (onNavigateToLogin) onNavigateToLogin();
+            // No direct redirect here. App.jsx's RequireAuth will handle if user is unauthenticated.
             return;
         }
 
         try {
             const paymentData = {
-                userId: userDetails.id, // Backend expects userId directly
+                userId: userDetails.id,
                 amount: PAYMENT_AMOUNT,
-                // controlNumber will be generated by backend
-                // status will be set to PENDING by backend
             };
             
-            const response = await axios.post('/payments', paymentData); // Use configured axios
-            
-            const data = response.data; // Axios response data is directly available
+            const response = await axios.post('/payments', paymentData);
+            const data = response.data;
 
             setControlNumber(data.controlNumber);
             setPaid(true);
             setPaymentStatus('PENDING');
             setIsApproved(false);
-            // After initiating payment, update parent state to reflect pending status
-            if (onAuthSuccess) {
-                onAuthSuccess({ ...userDetails, hasPaidApplicationFee: false }); // User has initiated, but not yet approved
+            if (onAuthSuccess && userDetails.hasPaidApplicationFee !== false) {
+                onAuthSuccess({ ...userDetails, hasPaidApplicationFee: false });
             }
         } catch (err) {
             console.error("Payment creation error:", err);
-            const errorMessage = err.response?.data?.message || err.message || 'An unexpected error occurred.';
+            const errorMessage = err.response?.data?.message || err.message || 'An unexpected error occurred during payment initiation.';
             setError(errorMessage);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleContinue = () => onNavigateToApplication(); // Use prop for navigation
+    // Navigates to the application form page
+    const handleContinueToApplication = () => {
+        onNavigateToApplication();
+    };
     
+    // Handles copying the control number to clipboard
     const handleCopy = () => {
         if (controlNumber) {
-            navigator.clipboard.writeText(controlNumber).then(() => { // Use navigator.clipboard
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1300);
-            }).catch(err => {
-                console.error('Failed to copy text: ', err);
-                // Fallback for older browsers or environments where navigator.clipboard is not available
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(controlNumber).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1300);
+                }).catch(err => {
+                    console.error('Failed to copy text using navigator.clipboard: ', err);
+                    const textArea = document.createElement("textarea");
+                    textArea.value = controlNumber;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-9999px";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1300);
+                    } catch (e) {
+                        console.error('Fallback copy failed: ', e);
+                    }
+                    document.body.removeChild(textArea);
+                });
+            } else {
                 const textArea = document.createElement("textarea");
                 textArea.value = controlNumber;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
                 document.body.appendChild(textArea);
                 textArea.focus();
                 textArea.select();
@@ -261,21 +279,21 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
                     console.error('Fallback copy failed: ', e);
                 }
                 document.body.removeChild(textArea);
-            });
+            }
         }
     };
 
+    // Resets payment state to allow generating a new control number
     const handleTryAgain = () => {
         setControlNumber('');
         setPaid(false);
         setPaymentStatus('');
         setIsApproved(false);
         setError('');
-        // Re-fetch status to ensure UI is consistent with backend
-        setLoadingPayments(true);
-        // This will trigger the useEffect to re-verify payment status
+        setLoadingPayments(true); // Trigger a re-fetch of payment status
     };
 
+    // Render loading state while initial payment status is being fetched
     if (loadingPayments) {
         return (
             <div className="modern-gradient-bg py-5 min-vh-100 d-flex align-items-center justify-content-center">
@@ -287,6 +305,8 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
         );
     }
 
+    // Render error state if user details are missing (should be rare due to App.jsx guards)
+    // Removed direct redirect to login here. App.jsx's RequireAuth should handle this.
     if (error && error.includes('User details missing')) {
         return (
             <div className="modern-gradient-bg py-5 min-vh-100 d-flex align-items-center justify-content-center">
@@ -336,7 +356,7 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
                                         className="btn btn-sm btn-outline-primary"
                                         onClick={() => setShowHelp(!showHelp)}
                                     >
-                                        <i className="fas fa-info-circle me-1"></i> Help {/* Font Awesome icon */}
+                                        <i className="fas fa-info-circle me-1"></i> Help
                                     </button>
                                 </div>
                                 
@@ -352,7 +372,7 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
                                         onClick={handleCopy}
                                         disabled={!controlNumber}
                                     >
-                                        <i className="far fa-copy"></i> {copied ? 'Copied!' : 'Copy'} {/* Font Awesome icon */}
+                                        <i className="far fa-copy"></i> {copied ? 'Copied!' : 'Copy'}
                                     </button>
                                 </div>
                                 
@@ -382,7 +402,7 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
                             
                             {paymentStatus === 'REJECTED' && (
                                 <div className="alert alert-warning text-center">
-                                    Payment rejected. Please contact support.<br/>
+                                    Your previous payment was rejected. Please generate a new control number.<br/>
                                     <button className="btn btn-link mt-2" onClick={handleTryAgain}>Try Again</button>
                                 </div>
                             )}
@@ -391,20 +411,20 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
                                 {isApproved ? (
                                     <button
                                         className="btn btn-success btn-lg"
-                                        onClick={handleContinue}
+                                        onClick={handleContinueToApplication}
                                     >
-                                        <i className="fas fa-check-circle me-2"></i> {/* Font Awesome icon */}
+                                        <i className="fas fa-check-circle me-2"></i>
                                         Continue to Application
                                     </button>
-                                ) : paid ? ( // If paid is true but not approved (means pending)
-                                    <button 
-                                        className="btn btn-warning btn-lg" 
+                                ) : paid ? (
+                                    <button
+                                        className="btn btn-warning btn-lg"
                                         disabled
                                     >
-                                        <i className="fas fa-spinner fa-spin me-2"></i> {/* Font Awesome icon */}
+                                        <i className="fas fa-spinner fa-spin me-2"></i>
                                         Waiting for Approval
                                     </button>
-                                ) : ( // Not paid, not pending, not approved, not rejected
+                                ) : (
                                     <button
                                         className="btn btn-primary btn-lg gradient-btn"
                                         onClick={handleConfirmPayment}

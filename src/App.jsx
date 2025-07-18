@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'; // Import useNavigate
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import SidebarNavigation from './components/SidebarNavigation';
 import Dashboard from './components/Dashboard';
 import ApplicationForm from './components/ApplicationForm';
@@ -15,81 +15,141 @@ import axios from './api/axiosConfig.jsx'; // Import the configured axios instan
 async function userHasApprovedPayment(userId) {
   if (!userId) return false;
   try {
-    const response = await axios.get(`/payments/user/${userId}`);
-    const data = response.data; // Axios puts response data in .data
-
-    if (!Array.isArray(data)) return false;
-    // Find latest APPROVED payment
-    const approved = data
-      .filter(p => p.status === 'APPROVED')
-      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
-    return !!approved;
+    // Call the /api/payments/me/status endpoint directly for the current user's approval status
+    const response = await axios.get(`/payments/me/status`);
+    return response.data; // This endpoint directly returns true/false
   } catch (error) {
     console.error("Error checking payment status:", error);
-    // If there's an error (e.g., 401, 403), axiosConfig will handle redirection
+    // Axios interceptor handles 401/403 redirection. For other errors, assume not approved.
     return false;
   }
 }
 
+// NEW: Secure route for application form: only allow if application NOT submitted
+function RequireApplicationNotSubmitted({ children, userDetails, loadingUser }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Wait for global user loading to complete
+    if (loadingUser) {
+      return;
+    }
+
+    // If user is not logged in after loading, redirect to login
+    if (!userDetails) {
+      navigate('/login', { state: { from: location }, replace: true });
+      return;
+    }
+
+    // If user is not a STUDENT, redirect them to their respective dashboard
+    if (userDetails.role !== 'STUDENT') {
+      if (userDetails.role === 'ADMIN') {
+        navigate('/admin', { replace: true });
+      } else if (userDetails.role === 'MINISTRY') {
+        navigate('/ministry', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true }); // Fallback for unexpected roles
+      }
+      return;
+    }
+
+    // If applicationDetails exist AND its status is not 'PENDING' or 'SUBMITTED'
+    // (meaning it's been reviewed/processed), redirect to status page.
+    // This allows students to re-submit if their application was rejected or if they need to edit
+    // while it's still 'SUBMITTED' or 'PENDING'.
+    // Adjust this logic if you want strict one-time submission regardless of status.
+    if (userDetails.applicationDetails && 
+        (userDetails.applicationDetails.applicationStatus === 'SELECTED' || 
+         userDetails.applicationDetails.applicationStatus === 'REJECTED' ||
+         userDetails.applicationDetails.applicationStatus === 'UNDER_REVIEW')) {
+      console.log("Application already processed/submitted. Redirecting to status page.");
+      navigate('/status', { state: { from: location }, replace: true }); // Redirect to status page
+    }
+  }, [userDetails, loadingUser, location, navigate]);
+
+  if (loadingUser) {
+    return <div className="p-5 text-center">Loading user data...</div>;
+  }
+
+  // If user is a student and application is NOT submitted (or is in SUBMITTED/PENDING state), render children
+  return children;
+}
+
+
 // Secure route for application: only allow if payment is approved
 function RequireApprovedPayment({ children, userDetails, hasPaid, onAuthSuccess, loadingUser }) {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingPaymentStatus, setIsLoadingPaymentStatus] = useState(true); // New state for payment status loading
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     let mounted = true;
-    async function checkPayment() {
-      // Wait for user details to be loaded from localStorage first
+    async function checkPaymentAndUser() {
+      // 1. Wait for global user loading to complete
       if (loadingUser) {
         return;
       }
 
-      if (!userDetails || userDetails.role !== 'STUDENT') {
-        if (mounted) setIsLoading(false);
-        return;
-      }
-      // If hasPaid is already true from localStorage or previous login, no need to re-check
-      if (hasPaid) {
-        if (mounted) setIsLoading(false);
+      // 2. If user is not logged in after loading, redirect to login
+      if (!userDetails) {
+        if (mounted) navigate('/login', { state: { from: location }, replace: true });
         return;
       }
 
-      const ok = await userHasApprovedPayment(userDetails.id);
+      // 3. If user is not a STUDENT, redirect them to their respective dashboard
+      if (userDetails.role !== 'STUDENT') {
+        if (mounted) {
+          if (userDetails.role === 'ADMIN') {
+            navigate('/admin', { replace: true });
+          } else if (userDetails.role === 'MINISTRY') {
+            navigate('/ministry', { replace: true });
+          } else {
+            navigate('/dashboard', { replace: true }); // Fallback for unexpected roles
+          }
+        }
+        return;
+      }
+
+      // 4. If hasPaid is already true (from localStorage or previous update), we are good
+      if (hasPaid) {
+        if (mounted) setIsLoadingPaymentStatus(false);
+        return;
+      }
+
+      // 5. Only if user is a STUDENT and hasPaid is false, check payment status from backend
+      // This call is intentionally made after all other checks to ensure user is authenticated.
+      const approved = await userHasApprovedPayment(userDetails.id);
       if (mounted) {
-        onAuthSuccess({ ...userDetails, hasPaidApplicationFee: ok }); // Update parent state
-        setIsLoading(false);
+        // Update parent state with the latest payment status
+        if (onAuthSuccess) {
+          onAuthSuccess({ ...userDetails, hasPaidApplicationFee: approved });
+        }
+        setIsLoadingPaymentStatus(false);
       }
     }
-    checkPayment();
-    return () => {
-      mounted = false;
-    };
-  }, [userDetails, hasPaid, onAuthSuccess, loadingUser]); // Re-run if userDetails, hasPaid, or loadingUser changes
+    checkPaymentAndUser();
+  }, [userDetails, hasPaid, onAuthSuccess, loadingUser, location, navigate]); // Add loadingUser to dependencies
 
-  if (loadingUser || isLoading) {
-    return <div className="p-5 text-center">Loading user data...</div>;
+  // Show loading state if App is loading user or if this component is checking payment status
+  if (loadingUser || isLoadingPaymentStatus) {
+    return <div className="p-5 text-center">Loading user data and payment status...</div>;
   }
 
-  // Redirect if not logged in or not a student
-  if (!userDetails) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-  if (userDetails.role !== 'STUDENT') {
-    return <Navigate to="/dashboard" state={{ from: location }} replace />; // Redirect non-students
-  }
-
-  // Redirect if student but hasn't paid
-  if (!hasPaid) {
+  // If user is a student but hasn't paid, redirect to payment page
+  if (userDetails && userDetails.role === 'STUDENT' && !hasPaid) {
     return <Navigate to="/payment" state={{ from: location }} replace />;
   }
 
+  // If all checks pass, render children
   return children;
 }
 
 // Helper to conditionally render sidebar based on route
 function AppContent() {
   const location = useLocation();
-  const navigate = useNavigate(); // Initialize useNavigate hook
+  const navigate = useNavigate();
+
   // Hide sidebar on login/register page
   const hideSidebar = location.pathname === '/login' || location.pathname === '/register';
 
@@ -100,6 +160,7 @@ function AppContent() {
   const [userDetails, setUserDetails] = useState(null);
   const [hasPaid, setHasPaid] = useState(false);
 
+  // --- IMPORTANT: Initial user data load from localStorage ---
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem('user');
@@ -113,8 +174,11 @@ function AppContent() {
       // If parsing fails, clear localStorage to prevent infinite loops with bad data
       localStorage.removeItem('user');
       localStorage.removeItem('jwtToken');
+      setUserDetails(null); // Ensure userDetails is null if localStorage is corrupt
+      setHasPaid(false);
     } finally {
-      setLoadingUser(false); // User details loading is complete
+      // Crucial: Set loadingUser to false ONLY after localStorage check is complete
+      setLoadingUser(false); 
     }
   }, []); // Run only once on mount
 
@@ -127,33 +191,57 @@ function AppContent() {
 
   // Callback for successful authentication (login or registration)
   const handleAuthSuccess = (user) => {
+    console.log("handleAuthSuccess called with user:", user);
     setUserDetails(user);
-    setHasPaid(user.hasPaidApplicationFee);
+    setHasPaid(user.hasPaidApplicationFee || false); // Ensure hasPaid is set
     localStorage.setItem('user', JSON.stringify(user)); // Ensure localStorage is updated immediately
+    localStorage.setItem('jwtToken', user.token); // Assuming 'user' object contains 'token'
 
-    // Determine redirect path based on role and payment status using navigate()
+    // Determine redirect path based on role and application status
     if (user.role === 'ADMIN') {
       navigate("/admin", { replace: true });
     } else if (user.role === 'MINISTRY') {
       navigate("/ministry", { replace: true });
     } else if (user.role === 'STUDENT') {
-      if (user.hasPaidApplicationFee) {
-        navigate("/dashboard", { replace: true });
+      // If student has submitted application and it's not just pending/submitted, go to status page
+      // This logic should match RequireApplicationNotSubmitted
+      if (user.applicationDetails && 
+          (user.applicationDetails.applicationStatus === 'SELECTED' || 
+           user.applicationDetails.applicationStatus === 'REJECTED' ||
+           user.applicationDetails.applicationStatus === 'UNDER_REVIEW')) {
+        navigate("/status", { replace: true });
       } else {
-        navigate("/payment", { replace: true });
+        // Otherwise, go to dashboard (which might lead to payment/application form)
+        navigate("/dashboard", { replace: true });
       }
     } else {
-      navigate("/dashboard", { replace: true }); // Default redirect
+      navigate("/login", { replace: true }); // Default redirect for unknown roles
     }
   };
 
+  // Centralized sign-out logic
   const handleSignOut = () => {
+    console.log("Performing handleSignOut...");
     localStorage.removeItem('jwtToken');
     localStorage.removeItem('user');
     setUserDetails(null);
     setHasPaid(false);
     navigate("/login", { replace: true }); // Navigate to login after sign out
   };
+
+  // Listen for the custom 'auth-logout' event from axios interceptor
+  useEffect(() => {
+    const handleAuthLogout = () => {
+      console.log("Auth logout event received. Performing clean sign out.");
+      handleSignOut(); // Call the existing sign out logic
+    };
+
+    window.addEventListener('auth-logout', handleAuthLogout);
+
+    return () => {
+      window.removeEventListener('auth-logout', handleAuthLogout);
+    };
+  }, []); // Empty dependency array means this runs once on mount and cleans up on unmount
 
   // Dynamic CSS Injection for Bootstrap Icons
   useEffect(() => {
@@ -177,27 +265,31 @@ function AppContent() {
           <Route path="/register" element={<Register onAuthSuccess={handleAuthSuccess} />} />
 
           {/* Protected Routes */}
+          {/* RequireAuth ensures user is logged in and has correct role before rendering children */}
           <Route path="/dashboard" element={
-            <RequireAuth userDetails={userDetails} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
-              <Dashboard userDetails={userDetails} />
+            <RequireAuth userDetails={userDetails} allowedRoles={['STUDENT', 'ADMIN', 'MINISTRY']} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
+              <Dashboard userDetails={userDetails} onNavigateToPayment={() => navigate('/payment')} onNavigateToApplication={() => navigate('/application')} onNavigateToProfile={() => navigate('/profile')} />
             </RequireAuth>
           } />
           <Route
             path="/application"
             element={
+              // Apply both payment approval and application not submitted guards
               <RequireApprovedPayment userDetails={userDetails} hasPaid={hasPaid} onAuthSuccess={handleAuthSuccess} loadingUser={loadingUser}>
-                <ApplicationForm onSubmitDetails={setUserDetails} submitted={!!userDetails?.applicationDetails} />
+                <RequireApplicationNotSubmitted userDetails={userDetails} loadingUser={loadingUser}>
+                  <ApplicationForm onSubmitDetails={handleAuthSuccess} submitted={!!userDetails?.applicationDetails} userDetails={userDetails} />
+                </RequireApplicationNotSubmitted>
               </RequireApprovedPayment>
             }
           />
           <Route path="/profile" element={
-            <RequireAuth userDetails={userDetails} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
-              <Profile userId={userDetails?.id} onUpdate={setUserDetails} />
+            <RequireAuth userDetails={userDetails} allowedRoles={['STUDENT']} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
+              <Profile userDetails={userDetails} onUpdate={handleAuthSuccess} />
             </RequireAuth>
           } />
           <Route path="/payment" element={
-            <RequireAuth userDetails={userDetails} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
-              <Payment userDetails={userDetails} setHasPaid={setHasPaid} onAuthSuccess={handleAuthSuccess} />
+            <RequireAuth userDetails={userDetails} allowedRoles={['STUDENT']} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
+              <Payment onNavigateToApplication={() => navigate('/application')} onNavigateToDashboard={() => navigate('/dashboard')} onNavigateToLogin={handleSignOut} userDetails={userDetails} setHasPaid={setHasPaid} onAuthSuccess={handleAuthSuccess} />
             </RequireAuth>
           } />
           <Route path="/admin" element={
@@ -211,13 +303,35 @@ function AppContent() {
             </RequireAuth>
           } />
           <Route path="/status" element={
-            <RequireAuth userDetails={userDetails} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
-              <ApplicationStatus />
+            <RequireAuth userDetails={userDetails} allowedRoles={['STUDENT', 'ADMIN', 'MINISTRY']} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
+              {/* FIX: Pass onSubmitDetails prop to ApplicationStatus */}
+              <ApplicationStatus userDetails={userDetails} onSubmitDetails={handleAuthSuccess} />
             </RequireAuth>
           } />
 
-          {/* Default redirect to login if no path matches or user is not logged in */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          {/* Default redirect to dashboard if user is logged in, otherwise to login */}
+          <Route path="/" element={
+            loadingUser ? (
+              <div className="p-5 text-center">Loading application...</div>
+            ) : userDetails ? (
+              // NEW: If student has submitted and status is not PENDING/SUBMITTED, go to status page
+              userDetails.role === 'STUDENT' && userDetails.applicationDetails && userDetails.applicationDetails.applicationStatus && (
+                userDetails.applicationDetails.applicationStatus === 'SELECTED' ||
+                userDetails.applicationDetails.applicationStatus === 'REJECTED' ||
+                userDetails.applicationDetails.applicationStatus === 'UNDER_REVIEW'
+              ) ? (
+                <Navigate to="/status" replace />
+              ) : (
+                userDetails.role === 'ADMIN' ? <Navigate to="/admin" replace /> :
+                userDetails.role === 'MINISTRY' ? <Navigate to="/ministry" replace /> :
+                <Navigate to="/dashboard" replace />
+              )
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          } />
+          {/* Fallback for any unmatched routes */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </>
@@ -227,6 +341,7 @@ function AppContent() {
 // Authentication guard component
 function RequireAuth({ children, userDetails, allowedRoles, onNavigateToLogin, loadingUser }) {
   const location = useLocation();
+  const navigate = useNavigate();
 
   if (loadingUser) {
     return <div className="p-5 text-center">Loading authentication...</div>;
@@ -237,10 +352,26 @@ function RequireAuth({ children, userDetails, allowedRoles, onNavigateToLogin, l
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check if user's role is allowed
-  if (allowedRoles && !allowedRoles.includes(userDetails.role)) {
-    // If role not allowed, redirect to a default dashboard or unauthorized page
-    return <Navigate to="/dashboard" state={{ from: location }} replace />;
+  // Determine the effective allowed roles for this route
+  // Default to an empty array if not provided, ensuring explicit role check
+  const effectiveAllowedRoles = allowedRoles || []; 
+
+  // Check if user's role is allowed for this specific route
+  if (effectiveAllowedRoles.length > 0 && !effectiveAllowedRoles.includes(userDetails.role)) {
+    console.warn(`Access denied for role '${userDetails.role}' on path '${location.pathname}'. Redirecting.`);
+    // If role not allowed, redirect to user's appropriate dashboard
+    if (userDetails.role === 'ADMIN') {
+      return <Navigate to="/admin" state={{ from: location }} replace />;
+    } else if (userDetails.role === 'MINISTRY') {
+      return <Navigate to="/ministry" state={{ from: location }} replace />;
+    } else if (userDetails.role === 'STUDENT') {
+      return <Navigate to="/dashboard" state={{ from: location }} replace />;
+    } else {
+      // Fallback for unexpected roles, or if a user tries to access a page
+      // not explicitly defined for their role, send them to login.
+      // This case should be rare if all roles are handled above.
+      return <Navigate to="/login" state={{ from: location }} replace />;
+    }
   }
 
   return children;

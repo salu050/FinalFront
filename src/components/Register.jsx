@@ -13,6 +13,7 @@ import {
   FaSun
 } from 'react-icons/fa';
 import confetti from 'canvas-confetti';
+import axios from '../api/axiosConfig.jsx'; // IMPORTANT: Import the configured axios instance
 
 // ---- BUBBLES AND ANIMATION STYLES ----
 const bubbles = [
@@ -281,8 +282,8 @@ const Register = ({ onAuthSuccess }) => {
 
     try {
       const url = isLogin
-        ? 'http://localhost:8080/api/users/login'
-        : 'http://localhost:8080/api/users/register';
+        ? '/users/login'
+        : '/users/register';
 
       const payload = isLogin
         ? { username: form.username, password: form.password }
@@ -292,55 +293,18 @@ const Register = ({ onAuthSuccess }) => {
             role: "STUDENT" // Explicitly send the role for new registrations
           };
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        if (isLogin) {
-          const nextAttempt = loginAttempts + 1;
-          setLoginAttempts(nextAttempt);
-          localStorage.setItem('loginAttempts', nextAttempt);
-          if (nextAttempt >= 3) {
-            const until = Date.now() + 2 * 60 * 1000; // 2 minutes
-            setCooldownUntil(until);
-            localStorage.setItem('loginCooldownUntil', until.toString());
-            setError('Too many failed attempts. Please wait 2 minutes before trying again.');
-            setIsLoading(false);
-            return;
-          } else {
-            setError(`Please enter valid username or password. Attempts left: ${3 - nextAttempt}`);
-          }
-        } else {
-          const errorData = await response.json();
-          setError(errorData.message || 'Registration failed');
-        }
-        setIsLoading(false);
-        return;
-      }
+      const response = await axios.post(url, payload);
+      const data = response.data;
 
       setLoginAttempts(0);
       localStorage.removeItem('loginAttempts');
       localStorage.removeItem('loginCooldownUntil');
 
-      const data = await response.json();
-      // localStorage.setItem('user', JSON.stringify(data)); // Handled by onAuthSuccess
-
-      // If backend returns a token, store it
-      if (data.token) {
-          localStorage.setItem('jwtToken', data.token);
-      }
-      // Store the entire user data object for client-side access to role, hasPaidApplicationFee etc.
-      localStorage.setItem('user', JSON.stringify(data));
-
-      clearUserFields();
-
-      setSuccessMorph(true);
-      setTimeout(() => setSuccessMorph(false), 1000);
-
       if (isLogin) {
+        // Only call onAuthSuccess for successful logins
+        if (onAuthSuccess) {
+          onAuthSuccess(data); // Pass the full user data including token and hasPaidApplicationFee
+        }
         setSuccess('Login successful!');
         setShowToast(true);
         setTimeout(() => setShowToast(false), 1800);
@@ -349,24 +313,27 @@ const Register = ({ onAuthSuccess }) => {
         confettiPop();
         setTimeout(() => setShowWelcome(false), 1700);
         setTimeout(() => setShowRocket(false), 1200);
-        // IMMEDIATELY call onAuthSuccess for navigation
-        if (onAuthSuccess) {
-          onAuthSuccess(data);
-        }
       } else {
-        setSuccess('Account created successfully!');
+        // For successful registration, show success message and switch to login form
+        setSuccess('Account created successfully! Please log in.');
         setShowToast(true);
         confettiPop();
+        // Clear form fields after successful registration
+        clearUserFields();
         setTimeout(() => {
-          setIsLogin(true); // After registration, switch to login view
-          setSuccess('');
+          setIsLogin(true); // Switch to login view
+          setSuccess(''); // Clear success message after switching
           setShowToast(false);
           setSuccessMorph(false);
-        }, 1500);
+        }, 2000); // Give user time to read success message
       }
+      setSuccessMorph(true);
+      setTimeout(() => setSuccessMorph(false), 1000); // Morph animation duration
+
     } catch (err) {
       console.error("Submission error:", err);
-      setError(err.message || 'An unexpected error occurred.');
+      setError(err.response?.data?.message || err.message || 'An unexpected error occurred. Please check your network connection.');
+      setSuccessMorph(false); // Ensure morph resets on error
     }
     setIsLoading(false);
   };
@@ -403,15 +370,9 @@ const Register = ({ onAuthSuccess }) => {
     }
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/users/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: resetUsername, newPassword: resetPassword }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to reset password.');
-      }
+      const response = await axios.post('/users/reset-password', { username: resetUsername, newPassword: resetPassword });
+      const data = response.data;
+
       setResetMsg('Password reset successfully! You can now login.');
       setShowToast(true);
       confettiPop();
@@ -423,7 +384,8 @@ const Register = ({ onAuthSuccess }) => {
         setShowToast(false);
       }, 1500);
     } catch (err) {
-      setResetMsg(err.message);
+      console.error("Reset password error:", err);
+      setError(err.response?.data?.message || err.message || 'Failed to reset password.');
     }
     setIsLoading(false);
   };
@@ -525,12 +487,12 @@ const Register = ({ onAuthSuccess }) => {
       {/* Toast notification */}
       {showToast && (
         <div className="position-fixed top-0 end-0 m-4 toast show" style={{ zIndex: 9999, minWidth: 260 }}>
-          <div className="toast-header bg-success text-white">
-            <FaCheckCircle className="me-2" />
-            <strong className="me-auto">Success</strong>
+          <div className={`toast-header ${success ? 'bg-success' : 'bg-danger'} text-white`}>
+            {success ? <FaCheckCircle className="me-2" /> : <FaTimesCircle className="me-2" />}
+            <strong className="me-auto">{success ? 'Success' : 'Error'}</strong>
           </div>
           <div className="toast-body">
-            {success || resetMsg || "Action completed!"}
+            {success || error || resetMsg || "Action completed!"}
           </div>
         </div>
       )}
@@ -822,7 +784,7 @@ const Register = ({ onAuthSuccess }) => {
               Need help? <a href="mailto:support@veta.go.tz" className="text-primary">Contact Support</a>
             </span>
           </div>
-          <div className="text-center mt-2" style={{opacity: 0.93, fontSize: 13}}>
+          <div className="text-center mt-2" style={{opacity: 0.93, fontSize: 13}} aptitude="register-footer-text">
             <span className="text-muted">VETA | &copy; {new Date().getFullYear()} | All rights reserved</span>
           </div>
         </div>

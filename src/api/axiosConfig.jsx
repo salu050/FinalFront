@@ -1,4 +1,4 @@
-// src/api/axiosConfig.js
+// src/api/axiosConfig.jsx
 import axios from 'axios';
 
 const instance = axios.create({
@@ -27,13 +27,19 @@ instance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      // Token expired or unauthorized. Clear token and redirect to login.
-      console.error("Authentication error:", error.response.status);
+      console.error("Authentication error caught by interceptor:", error.response.status);
+      // Clear token and user data immediately
       localStorage.removeItem('jwtToken');
       localStorage.removeItem('user');
-      // Use window.location.href for full page reload to clear React state
-      window.location.href = '/login';
+      
+      // Dispatch a custom event to signal logout to the App component
+      // This allows App.jsx to handle navigation using React Router's navigate
+      window.dispatchEvent(new Event('auth-logout'));
+
+      // Return a rejected promise to stop further processing of this request
+      return Promise.reject(error);
     }
+    // For other errors, just reject the promise as usual
     return Promise.reject(error);
   }
 );
