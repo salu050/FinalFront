@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-// Import the configured axios instance for authenticated API calls
-import axios from '../api/axiosConfig.jsx'; // Ensure this path is correct
+import axios from '../api/axiosConfig'; // Removed .jsx extension
 
 // Avatar utility: use initials from username/email
 const getAvatar = (username) =>
@@ -143,27 +142,39 @@ function AdminDashboard({ onNavigateToLogin }) { // Added onNavigateToLogin prop
     const fetchPayments = async () => {
       setLoadingPayments(true);
       setError(null);
-      // axiosConfig automatically handles getting the token from localStorage
-      // and attaching it to the Authorization header.
 
       try {
-        // Ensure your backend's /api/payments endpoint returns payment data
-        // with nested user details (e.g., username, id) if you want to display them.
-        // Otherwise, you'll only have payment.userId
-        const response = await axios.get('/payments'); // Use axios instance
-
-        setPayments(response.data); // Axios puts response data in .data
+        const response = await axios.get('/payments');
+        setPayments(response.data);
       } catch (err) {
         console.error("Error fetching payments:", err);
-        const errorMessage = err.response?.data?.message || err.message || 'An unexpected error occurred.';
-        setError(errorMessage);
+        // --- START: Enhanced Error Logging ---
+        let errorMessage = 'An unexpected error occurred.';
+        if (err.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          errorMessage = `Server Error (${err.response.status}): ${err.response.data?.message || err.response.statusText}`;
+          console.error("Server Response Data:", err.response.data);
+          console.error("Server Response Status:", err.response.status);
+          console.error("Server Response Headers:", err.response.headers);
 
-        // If 401 or 403, redirect to login
-        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-          if (onNavigateToLogin) {
-            onNavigateToLogin();
+          // If 401 or 403, redirect to login
+          if (err.response.status === 401 || err.response.status === 403) {
+            console.warn("Authentication/Authorization error. Redirecting to login.");
+            if (onNavigateToLogin) {
+              onNavigateToLogin();
+            }
           }
+        } else if (err.request) {
+          // The request was made but no response was received
+          errorMessage = 'Network Error: No response received from server.';
+          console.error("No response received:", err.request);
+        } else {
+          // Something happened in setting up the request that triggered an Error
+          errorMessage = `Request Setup Error: ${err.message}`;
         }
+        setError(errorMessage);
+        // --- END: Enhanced Error Logging ---
       } finally {
         setLoadingPayments(false);
       }
@@ -196,15 +207,26 @@ function AdminDashboard({ onNavigateToLogin }) { // Added onNavigateToLogin prop
       setActionMsg(`Payment ${action}d successfully!`);
     } catch (err) {
       console.error(`Error ${action}ing payment:`, err);
-      const errorMessage = err.response?.data?.message || err.message || `Failed to ${action} payment.`;
-      setActionMsg(errorMessage);
+      // --- START: Enhanced Error Logging for Actions ---
+      let errorMessage = `Failed to ${action} payment.`;
+      if (err.response) {
+        errorMessage = `Server Error (${err.response.status}): ${err.response.data?.message || err.response.statusText}`;
+        console.error("Server Response Data (Action):", err.response.data);
+        console.error("Server Response Status (Action):", err.response.status);
 
-      // If 401 or 403, redirect to login
-      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        if (onNavigateToLogin) {
-          onNavigateToLogin();
+        if (err.response.status === 401 || err.response.status === 403) {
+          console.warn("Authentication/Authorization error for action. Redirecting to login.");
+          if (onNavigateToLogin) {
+            onNavigateToLogin();
+          }
         }
+      } else if (err.request) {
+        errorMessage = 'Network Error: No response received for action.';
+      } else {
+        errorMessage = `Request Setup Error (Action): ${err.message}`;
       }
+      setActionMsg(errorMessage); // Display error message in actionMsg state
+      // --- END: Enhanced Error Logging for Actions ---
     }
   };
 
@@ -320,9 +342,9 @@ function AdminDashboard({ onNavigateToLogin }) { // Added onNavigateToLogin prop
       {error && (
         <div className="alert alert-danger mb-4">
           Error loading payments: {error}
-          {error.includes("Unauthorized") && (
+          {error.includes("Unauthorized") || error.includes("Forbidden") ? (
             <button className="btn btn-sm btn-light ms-3" onClick={onNavigateToLogin}>Login</button>
-          )}
+          ) : null}
         </div>
       )}
 

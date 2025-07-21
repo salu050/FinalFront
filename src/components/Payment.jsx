@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from '../api/axiosConfig.jsx'; // IMPORTANT: Use your configured axios instance
+// Import the configured axios instance for authenticated API calls
+import axios from '../api/axiosConfig'; // Removed .jsx extension
 
 const PAYMENT_AMOUNT = 10000; // Set your fee here
 
@@ -136,17 +137,22 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
             }
 
             try {
+                // This endpoint checks the user's hasPaidApplicationFee status directly from the User entity
                 const response = await axios.get(`/payments/me/status`);
-                const hasPaidApplicationFee = response.data;
+                const hasPaidApplicationFee = response.data; // Assuming backend returns a boolean
 
                 if (hasPaidApplicationFee) {
                     setPaid(true);
                     setIsApproved(true);
                     setPaymentStatus('APPROVED');
+                    // Update userDetails in parent state if it's not already true
                     if (onAuthSuccess && userDetails.hasPaidApplicationFee !== true) {
                         onAuthSuccess({ ...userDetails, hasPaidApplicationFee: true });
                     }
                 } else {
+                    // If not approved yet, fetch all payments for the user to find pending/rejected ones
+                    // NOTE: Your backend's /payments/user/{userId} endpoint needs to return Payment objects
+                    // that include the 'status' and 'controlNumber' fields.
                     const paymentsResponse = await axios.get(`/payments/user/${userDetails.id}`);
                     const payments = paymentsResponse.data;
                     const pendingPayment = payments.find(p => p.status === 'PENDING');
@@ -164,11 +170,13 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
                         setPaymentStatus('REJECTED');
                         setError('Your previous payment was rejected. Please generate a new control number.');
                     } else {
+                        // No pending or rejected payments, user needs to initiate a new payment
                         setPaid(false);
                         setIsApproved(false);
                         setControlNumber('');
                         setPaymentStatus('');
                     }
+                    // Update userDetails in parent state if it's not already false
                     if (onAuthSuccess && userDetails.hasPaidApplicationFee !== false) {
                         onAuthSuccess({ ...userDetails, hasPaidApplicationFee: false });
                     }
@@ -189,8 +197,9 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
         // Poll only if userDetails are available
         if (userDetails && userDetails.id) {
             verifyPayment();
+            // Set up polling every 5 seconds
             const interval = setInterval(verifyPayment, 5000);
-            return () => clearInterval(interval);
+            return () => clearInterval(interval); // Cleanup interval on component unmount or userDetails change
         } else {
             // If userDetails are not available, stop loading and don't poll
             setLoadingPayments(false);
@@ -210,17 +219,34 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
 
         try {
             const paymentData = {
+                // Frontend sends userId, backend controller must fetch User entity and set it on Payment
                 userId: userDetails.id,
                 amount: PAYMENT_AMOUNT,
             };
             
+            // NOTE: Ensure your backend has a POST /payments endpoint in a controller
+            // (e.g., PaymentController) that correctly processes this 'userId'
+            // to associate the payment with the User entity.
+            // Example backend controller logic:
+            // @PostMapping("/payments")
+            // public ResponseEntity<Payment> createPayment(@RequestBody Map<String, Object> payload) {
+            //     Long userId = ((Number) payload.get("userId")).longValue();
+            //     Double amount = ((Number) payload.get("amount")).doubleValue();
+            //     User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+            //     Payment newPayment = new Payment();
+            //     newPayment.setAmount(amount);
+            //     newPayment.setUser(user); // <-- Crucial step in backend controller
+            //     Payment savedPayment = paymentService.createPayment(newPayment);
+            //     return ResponseEntity.ok(savedPayment);
+            // }
             const response = await axios.post('/payments', paymentData);
-            const data = response.data;
+            const data = response.data; // Backend should return the created Payment object
 
             setControlNumber(data.controlNumber);
             setPaid(true);
             setPaymentStatus('PENDING');
             setIsApproved(false);
+            // Update userDetails in parent state to reflect new payment status (not yet approved)
             if (onAuthSuccess && userDetails.hasPaidApplicationFee !== false) {
                 onAuthSuccess({ ...userDetails, hasPaidApplicationFee: false });
             }
@@ -241,12 +267,14 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
     // Handles copying the control number to clipboard
     const handleCopy = () => {
         if (controlNumber) {
+            // Prefer modern Clipboard API
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(controlNumber).then(() => {
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1300);
                 }).catch(err => {
                     console.error('Failed to copy text using navigator.clipboard: ', err);
+                    // Fallback to old method if Clipboard API fails
                     const textArea = document.createElement("textarea");
                     textArea.value = controlNumber;
                     textArea.style.position = "fixed";
@@ -264,6 +292,7 @@ const Payment = ({ onNavigateToApplication, onNavigateToDashboard, onNavigateToL
                     document.body.removeChild(textArea);
                 });
             } else {
+                // Fallback for older browsers
                 const textArea = document.createElement("textarea");
                 textArea.value = controlNumber;
                 textArea.style.position = "fixed";
