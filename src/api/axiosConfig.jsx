@@ -1,8 +1,7 @@
-// src/api/axiosConfig.jsx
 import axios from 'axios';
 
 const instance = axios.create({
-  baseURL: 'http://localhost:8080/api', // Your backend base URL
+  baseURL: 'http://localhost:8082/api', // Updated to HTTPS and new port 8443 with /api path
   headers: {
     'Content-Type': 'application/json',
   },
@@ -28,22 +27,13 @@ instance.interceptors.response.use(
   (error) => {
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
       console.error("Authentication error caught by interceptor:", error.response.status);
-
-      // --- START DEBUGGING ADDITION ---
-      const tokenBeforeClear = localStorage.getItem('jwtToken');
-      console.log("!!! DEBUG: JWT Token before clearing (due to 401/403):", tokenBeforeClear);
-      const userBeforeClear = localStorage.getItem('user');
-      console.log("!!! DEBUG: User data before clearing (due to 401/403):", userBeforeClear);
-      // --- END DEBUGGING ADDITION ---
-
-      // --- TEMPORARILY COMMENT OUT THESE LINES TO PREVENT REDIRECTION ---
       // Clear token and user data immediately
-      // localStorage.removeItem('jwtToken');
-      // localStorage.removeItem('user');
+      localStorage.removeItem('jwtToken');
+      localStorage.removeItem('user');
       
       // Dispatch a custom event to signal logout to the App component
-      // window.dispatchEvent(new Event('auth-logout'));
-      // --- END TEMPORARY COMMENT OUT ---
+      // This allows App.jsx to handle navigation using React Router's navigate
+      window.dispatchEvent(new Event('auth-logout'));
 
       // Return a rejected promise to stop further processing of this request
       return Promise.reject(error);
