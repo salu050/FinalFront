@@ -5,11 +5,18 @@ import Dashboard from './components/Dashboard';
 import ApplicationForm from './components/ApplicationForm';
 import Payment from './components/Payment';
 import Profile from './components/Profile';
-import AdminDashboard from './components/AdminDashboard';
+import AdminDashboard from './components/AdminDashboard'; // Existing Admin Dashboard
 import MinistryDashboard from './components/MinistryDashboard';
 import ApplicationStatus from './components/ApplicationStatus';
 import Register from './components/Register';
 import axios from './api/axiosConfig.jsx'; // Import the configured axios instance
+
+// --- UPDATED IMPORTS FOR THE ROUTES ---
+// For 'View Payments' route, we will use AdminDashboard
+// For 'Applicant Details' route, we will use ApplicationDetails
+import ApplicationDetails from './components/ApplicationDetails'; // Existing Application Details
+// Removed: import Settings from './components/Settings';
+// --- END UPDATED IMPORTS ---
 
 // Helper to check payment status using axios
 async function userHasApprovedPayment(userId) {
@@ -59,8 +66,8 @@ function RequireApplicationNotSubmitted({ children, userDetails, loadingUser }) 
     // This allows students to re-submit if their application was rejected or if they need to edit
     // while it's still 'SUBMITTED' or 'PENDING'.
     // Adjust this logic if you want strict one-time submission regardless of status.
-    if (userDetails.applicationDetails && 
-        (userDetails.applicationDetails.applicationStatus === 'SELECTED' || 
+    if (userDetails.applicationDetails &&
+        (userDetails.applicationDetails.applicationStatus === 'SELECTED' ||
          userDetails.applicationDetails.applicationStatus === 'REJECTED' ||
          userDetails.applicationDetails.applicationStatus === 'UNDER_REVIEW')) {
       console.log("Application already processed/submitted. Redirecting to status page.");
@@ -178,7 +185,7 @@ function AppContent() {
       setHasPaid(false);
     } finally {
       // Crucial: Set loadingUser to false ONLY after localStorage check is complete
-      setLoadingUser(false); 
+      setLoadingUser(false);
     }
   }, []); // Run only once on mount
 
@@ -205,8 +212,8 @@ function AppContent() {
     } else if (user.role === 'STUDENT') {
       // If student has submitted application and it's not just pending/submitted, go to status page
       // This logic should match RequireApplicationNotSubmitted
-      if (user.applicationDetails && 
-          (user.applicationDetails.applicationStatus === 'SELECTED' || 
+      if (user.applicationDetails &&
+          (user.applicationDetails.applicationStatus === 'SELECTED' ||
            user.applicationDetails.applicationStatus === 'REJECTED' ||
            user.applicationDetails.applicationStatus === 'UNDER_REVIEW')) {
         navigate("/status", { replace: true });
@@ -257,7 +264,8 @@ function AppContent() {
 
   return (
     <>
-      {!hideSidebar && <SidebarNavigation hasPaid={hasPaid} onSignOut={handleSignOut} userRole={userDetails?.role} />}
+      {/* Updated: Pass userDetails to SidebarNavigation */}
+      {!hideSidebar && <SidebarNavigation userDetails={userDetails} onSignOut={handleSignOut} />}
       <div style={!hideSidebar ? { marginLeft: 90 } : {}}>
         <Routes>
           {/* Register component handles both login and registration */}
@@ -309,6 +317,28 @@ function AppContent() {
             </RequireAuth>
           } />
 
+          {/* --- NEW ROUTES FOR ADMIN/MINISTRY/ALL USERS --- */}
+          {/* Admin specific: View Payments (now using AdminDashboard as per your request) */}
+          <Route path="/payments" element={
+            <RequireAuth userDetails={userDetails} allowedRoles={['ADMIN']} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
+              <AdminDashboard onNavigateToLogin={handleSignOut} /> {/* Using AdminDashboard here */}
+            </RequireAuth>
+          } />
+          {/* Admin/Ministry specific: Applicant Details - Conditionally render based on role */}
+          <Route path="/applicants" element={
+            <RequireAuth userDetails={userDetails} allowedRoles={['ADMIN', 'MINISTRY']} onNavigateToLogin={handleSignOut} loadingUser={loadingUser}>
+              {userDetails?.role === 'MINISTRY' ? (
+                // For Ministry, show MinistryDashboard when they click 'Applicant Details'
+                <MinistryDashboard onNavigateToLogin={handleSignOut} />
+              ) : (
+                // For Admin, show ApplicationDetails when they click 'Applicant Details'
+                <ApplicationDetails onSubmitDetails={handleAuthSuccess} submitted={!!userDetails?.applicationDetails} userDetails={userDetails} />
+              )}
+            </RequireAuth>
+          } />
+          {/* Removed Route for Settings */}
+          {/* --- END NEW ROUTES --- */}
+
           {/* Default redirect to dashboard if user is logged in, otherwise to login */}
           <Route path="/" element={
             loadingUser ? (
@@ -354,7 +384,7 @@ function RequireAuth({ children, userDetails, allowedRoles, onNavigateToLogin, l
 
   // Determine the effective allowed roles for this route
   // Default to an empty array if not provided, ensuring explicit role check
-  const effectiveAllowedRoles = allowedRoles || []; 
+  const effectiveAllowedRoles = allowedRoles || [];
 
   // Check if user's role is allowed for this specific route
   if (effectiveAllowedRoles.length > 0 && !effectiveAllowedRoles.includes(userDetails.role)) {

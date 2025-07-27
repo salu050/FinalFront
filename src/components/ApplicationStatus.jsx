@@ -4,10 +4,33 @@ import { FaCheckCircle, FaTimesCircle, FaRegSmileBeam, FaSpinner, FaInfoCircle, 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // For LLM integration
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=";
 const API_KEY = ""; // Canvas will inject the API key at runtime
 
-// FIXED: Added onSubmitDetails to the destructured props with a default empty function
+// Helper function for exponential backoff
+const exponentialBackoffFetch = async (url, options, retries = 3, delay = 1000) => {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok && response.status === 429 && retries > 0) { // Too Many Requests
+      console.warn(`Rate limit hit, retrying in ${delay / 1000}s...`);
+      await new Promise(res => setTimeout(res, delay));
+      return exponentialBackoffFetch(url, options, retries - 1, delay * 2);
+    }
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    return response;
+  } catch (error) {
+    if (retries > 0 && (error.message.includes('Failed to fetch') || error.message.includes('Network Error'))) {
+      console.warn(`Network error, retrying in ${delay / 1000}s...`);
+      await new Promise(res => setTimeout(res, delay));
+      return exponentialBackoffFetch(url, options, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+};
+
 const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
   const [applicationDetails, setApplicationDetails] = useState(userDetails?.applicationDetails || null);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +40,7 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [copyMessage, setCopyMessage] = useState(''); // State for custom copy message
 
   // Sample data for the chart (replace with real data if available from backend)
   const chartData = [
@@ -38,7 +62,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
     bootstrapLink.crossOrigin = 'anonymous';
     document.head.appendChild(bootstrapLink);
 
-    // FIXED: Updated Font Awesome version and integrity hash
     const fontAwesomeLink = document.createElement('link');
     fontAwesomeLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';
     fontAwesomeLink.rel = 'stylesheet';
@@ -244,6 +267,22 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           z-index: 1001;
           cursor: pointer;
         }
+        .copy-message {
+          position: fixed;
+          bottom: 90px; /* Above the chat toggle button */
+          right: 20px;
+          background-color: rgba(0, 0, 0, 0.75);
+          color: white;
+          padding: 10px 15px;
+          border-radius: 8px;
+          font-size: 0.9rem;
+          z-index: 1002;
+          opacity: 0;
+          transition: opacity 0.3s ease-in-out;
+        }
+        .copy-message.show {
+          opacity: 1;
+        }
         @media (max-width: 768px) {
           .chat-widget {
             width: 90%;
@@ -257,6 +296,10 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
             height: 50px;
             font-size: 1.5rem;
             bottom: 10px;
+            right: 10px;
+          }
+          .copy-message {
+            bottom: 70px; /* Adjust for smaller screens */
             right: 10px;
           }
         }
@@ -285,26 +328,20 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       setIsLoading(true);
       setError('');
       try {
-        // Assuming backend endpoint to get application details for the current user
-        // This should be the /api/applications/user/{userId} endpoint
         const response = await axios.get(`/applications/user/${userDetails.id}`);
-        const data = response.data; // This should be the full ApplicationForm object
+        const data = response.data;
 
         if (data) {
           setApplicationDetails(data);
-          // Also update App.jsx's state if applicationDetails was just fetched/updated
-          // Ensure onSubmitDetails is a function before calling it
           if (onSubmitDetails && typeof onSubmitDetails === 'function' && userDetails.applicationDetails !== data) {
             onSubmitDetails({ ...userDetails, applicationDetails: data });
           }
         } else {
-          // If no data is returned, it means no application was found for the user
           setError('No application details found for this user.');
           setApplicationDetails(null);
         }
       } catch (err) {
         console.error("Error fetching application details:", err);
-        // More specific error message for 404 (Not Found)
         if (err.response && err.response.status === 404) {
           setError('You have not submitted an application form yet.');
         } else {
@@ -317,24 +354,43 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
     };
 
     fetchApplicationDetails();
-    // Poll for updates every 10 seconds (adjust as needed)
     const interval = setInterval(fetchApplicationDetails, 10000);
     return () => clearInterval(interval);
-  }, [userDetails, onSubmitDetails]); // Depend on userDetails and onSubmitDetails
+  }, [userDetails, onSubmitDetails]);
 
   // Function to send message to LLM
   const sendMessage = async () => {
     if (!chatInput.trim() || isChatLoading) return;
 
+    // Initial system instruction for context (only if chat is new)
+    let initialChatPrompt = [];
+    if (chatHistory.length === 0) {
+        let context = `You are a helpful assistant for VETA (Vocational Education and Training Authority) application status. 
+                       The user's full name is ${userDetails?.fullName || userDetails?.username || 'N/A'}. `;
+        if (applicationDetails) {
+            context += `Their application ID is ${applicationDetails.id || 'N/A'}, 
+                        current status is ${applicationDetails.applicationStatus || 'N/A'}. 
+                        They preferred center ${applicationDetails.selectedCenter || 'N/A'}. 
+                        If their application is SELECTED, their assigned center is ${applicationDetails.adminSelectedCenter || 'N/A'} 
+                        and assigned course ID is ${applicationDetails.adminSelectedCourseId || 'N/A'}.`;
+        } else {
+            context += `They have not submitted an application yet.`;
+        }
+        context += ` Answer questions related to their application status, general VETA procedures, or guide them. Keep answers concise and professional.`;
+
+        initialChatPrompt.push({ role: "user", parts: [{ text: context }] });
+        initialChatPrompt.push({ role: "model", parts: [{ text: "Hello! How can I assist you with your VETA application status today?" }] });
+    }
+
     const newUserMessage = { role: "user", parts: [{ text: chatInput }] };
-    const updatedChatHistory = [...chatHistory, newUserMessage];
-    setChatHistory(updatedChatHistory);
+    const updatedChatHistory = [...initialChatPrompt, ...chatHistory, newUserMessage];
+    setChatHistory(updatedChatHistory); // Update state to show user's message immediately
     setChatInput('');
     setIsChatLoading(true);
 
     try {
       const payload = { contents: updatedChatHistory };
-      const response = await fetch(GEMINI_API_URL + API_KEY, {
+      const response = await exponentialBackoffFetch(GEMINI_API_URL + API_KEY, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -370,12 +426,16 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       Submitted on: ${applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}
       Last Updated: ${applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}
     `;
+    
+    // Custom message box instead of alert()
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(detailsText.trim()).then(() => {
-        alert('Application details copied to clipboard!');
+        setCopyMessage('Details copied!');
+        setTimeout(() => setCopyMessage(''), 2000); // Hide message after 2 seconds
       }).catch(err => {
         console.error('Failed to copy text: ', err);
-        alert('Failed to copy details. Please try manually.');
+        setCopyMessage('Failed to copy details. Try manually.');
+        setTimeout(() => setCopyMessage(''), 3000);
       });
     } else {
       // Fallback for older browsers
@@ -386,10 +446,12 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       textArea.select();
       try {
         document.execCommand('copy');
-        alert('Application details copied to clipboard!');
+        setCopyMessage('Details copied (fallback)!');
+        setTimeout(() => setCopyMessage(''), 2000);
       } catch (err) {
         console.error('Fallback copy failed: ', err);
-        alert('Failed to copy details. Please try manually.');
+        setCopyMessage('Failed to copy details. Try manually.');
+        setTimeout(() => setCopyMessage(''), 3000);
       }
       document.body.removeChild(textArea);
     }
@@ -553,6 +615,13 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Custom copy message display */}
+        {copyMessage && (
+          <div className={`copy-message ${copyMessage ? 'show' : ''}`}>
+            {copyMessage}
           </div>
         )}
 

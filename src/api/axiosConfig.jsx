@@ -30,7 +30,7 @@ instance.interceptors.response.use(
       // Clear token and user data immediately
       localStorage.removeItem('jwtToken');
       localStorage.removeItem('user');
-      
+
       // Dispatch a custom event to signal logout to the App component
       // This allows App.jsx to handle navigation using React Router's navigate
       window.dispatchEvent(new Event('auth-logout'));
