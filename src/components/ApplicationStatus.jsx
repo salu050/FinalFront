@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from '../api/axiosConfig.jsx'; // Import the configured axios instance
 import { FaCheckCircle, FaTimesCircle, FaRegSmileBeam, FaSpinner, FaInfoCircle, FaClipboard } from 'react-icons/fa';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+// Removed: import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // For LLM integration
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=";
@@ -42,18 +42,9 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [copyMessage, setCopyMessage] = useState(''); // State for custom copy message
 
-  // Sample data for the chart (replace with real data if available from backend)
-  const chartData = [
-    { name: 'Jan', applications: 4000, accepted: 2400 },
-    { name: 'Feb', applications: 3000, accepted: 1398 },
-    { name: 'Mar', applications: 2000, accepted: 9800 },
-    { name: 'Apr', applications: 2780, accepted: 3908 },
-    { name: 'May', applications: 1890, accepted: 4800 },
-    { name: 'Jun', applications: 2390, accepted: 3800 },
-    { name: 'Jul', applications: 3490, accepted: 4300 },
-  ];
+  // Removed: Sample data for the chart (chartData)
 
-  // Dynamic CSS Injection for Bootstrap and custom styles
+  // Dynamic CSS Injection for Bootstrap and custom styles (remains unchanged)
   useEffect(() => {
     const bootstrapLink = document.createElement('link');
     bootstrapLink.href = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css';
@@ -308,65 +299,73 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
     }
 
     return () => {
-      document.head.removeChild(bootstrapLink);
-      document.head.removeChild(fontAwesomeLink);
-      if (document.getElementById(id)) {
-        document.head.removeChild(document.getElementById(id));
-      }
+      const head = document.head;
+      if (bootstrapLink.parentNode === head) head.removeChild(bootstrapLink);
+      if (fontAwesomeLink.parentNode === head) head.removeChild(fontAwesomeLink);
+      const existingStyle = document.getElementById(id);
+      if (existingStyle && existingStyle.parentNode === head) head.removeChild(existingStyle);
     };
   }, []);
 
-  // Fetch application details on component mount or userDetails change
-  useEffect(() => {
-    const fetchApplicationDetails = async () => {
-      if (!userDetails || !userDetails.id) {
-        setIsLoading(false);
-        setError('User details not available. Please log in.');
-        return;
-      }
+  // Memoized function to fetch application details
+  const fetchApplicationDetails = useCallback(async () => {
+    if (!userDetails || !userDetails.id) {
+      if (isLoading) setIsLoading(false);
+      setError('User details not available. Please log in.');
+      return;
+    }
 
+    if (applicationDetails === null && !error) {
       setIsLoading(true);
-      setError('');
-      try {
-        const response = await axios.get(`/applications/user/${userDetails.id}`);
-        const data = response.data;
+    }
+    setError('');
 
-        if (data) {
-          setApplicationDetails(data);
-          if (onSubmitDetails && typeof onSubmitDetails === 'function' && userDetails.applicationDetails !== data) {
-            onSubmitDetails({ ...userDetails, applicationDetails: data });
-          }
-        } else {
-          setError('No application details found for this user.');
-          setApplicationDetails(null);
+    try {
+      const response = await axios.get(`/applications/user/${userDetails.id}`);
+      const data = response.data;
+
+      setApplicationDetails(prevData => {
+        if (JSON.stringify(prevData) === JSON.stringify(data)) {
+          return prevData;
         }
-      } catch (err) {
-        console.error("Error fetching application details:", err);
-        if (err.response && err.response.status === 404) {
-          setError('You have not submitted an application form yet.');
-        } else {
-          setError(err.response?.data?.message || err.message || 'Failed to load application status.');
-        }
-        setApplicationDetails(null);
-      } finally {
-        setIsLoading(false);
+        return data;
+      });
+
+      if (onSubmitDetails && typeof onSubmitDetails === 'function' && JSON.stringify(userDetails.applicationDetails) !== JSON.stringify(data)) {
+         onSubmitDetails({ ...userDetails, applicationDetails: data });
       }
-    };
 
+    } catch (err) {
+      console.error("Error fetching application details:", err);
+      if (err.response && err.response.status === 404) {
+        setError('You have not submitted an application form yet.');
+      } else {
+        setError(err.response?.data?.message || err.message || 'Failed to load application status.');
+      }
+      setApplicationDetails(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userDetails?.id, onSubmitDetails, applicationDetails, error]);
+
+  // Effect to fetch initial data and set up polling
+  useEffect(() => {
     fetchApplicationDetails();
-    const interval = setInterval(fetchApplicationDetails, 10000);
-    return () => clearInterval(interval);
-  }, [userDetails, onSubmitDetails]);
+
+    const intervalId = setInterval(fetchApplicationDetails, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [fetchApplicationDetails]);
+
 
   // Function to send message to LLM
   const sendMessage = async () => {
     if (!chatInput.trim() || isChatLoading) return;
 
-    // Initial system instruction for context (only if chat is new)
     let initialChatPrompt = [];
     if (chatHistory.length === 0) {
         let context = `You are a helpful assistant for VETA (Vocational Education and Training Authority) application status. 
-                       The user's full name is ${userDetails?.fullName || userDetails?.username || 'N/A'}. `;
+                        The user's full name is ${userDetails?.fullName || userDetails?.username || 'N/A'}. `;
         if (applicationDetails) {
             context += `Their application ID is ${applicationDetails.id || 'N/A'}, 
                         current status is ${applicationDetails.applicationStatus || 'N/A'}. 
@@ -384,7 +383,7 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
 
     const newUserMessage = { role: "user", parts: [{ text: chatInput }] };
     const updatedChatHistory = [...initialChatPrompt, ...chatHistory, newUserMessage];
-    setChatHistory(updatedChatHistory); // Update state to show user's message immediately
+    setChatHistory(updatedChatHistory);
     setChatInput('');
     setIsChatLoading(true);
 
@@ -427,18 +426,16 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       Last Updated: ${applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}
     `;
     
-    // Custom message box instead of alert()
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(detailsText.trim()).then(() => {
         setCopyMessage('Details copied!');
-        setTimeout(() => setCopyMessage(''), 2000); // Hide message after 2 seconds
+        setTimeout(() => setCopyMessage(''), 2000);
       }).catch(err => {
         console.error('Failed to copy text: ', err);
         setCopyMessage('Failed to copy details. Try manually.');
         setTimeout(() => setCopyMessage(''), 3000);
       });
     } else {
-      // Fallback for older browsers
       const textArea = document.createElement("textarea");
       textArea.value = detailsText.trim();
       document.body.appendChild(textArea);
@@ -484,9 +481,7 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
     );
   }
 
-  // Determine current status for icon highlighting
-  // Backend sends applicationStatus as an enum string (e.g., "SUBMITTED", "SELECTED")
-  const currentStatus = applicationDetails?.applicationStatus || 'NOT_SUBMITTED'; // Use applicationStatus from backend
+  const currentStatus = applicationDetails?.applicationStatus || 'NOT_SUBMITTED';
 
   const statusIcons = [
     { label: 'Submitted', icon: 'fas fa-paper-plane', status: 'SUBMITTED' },
@@ -539,7 +534,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
             <p className="mb-0 mt-2">Please contact support for more information or consider reapplying next cycle.</p>
           </div>
         )}
-        {/* Removed NOT_SUBMITTED message here, as it's handled by the 'error' state now */}
 
         {/* Application Details Section */}
         {applicationDetails && (
@@ -567,7 +561,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                   <li><strong>Preferred VETA Center:</strong> {applicationDetails.selectedCenter || 'N/A'}</li>
                   {applicationDetails.preferredCourses && applicationDetails.preferredCourses.length > 0 && (
                     <li><strong>Preferred Courses:</strong> {applicationDetails.preferredCourses.map(courseId => {
-                        // Map course IDs back to names if you have a lookup, otherwise display ID
                         const course = (
                             [
                                 { id: 1, name: 'Welding and Fabrication' },
@@ -583,13 +576,11 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                         return course ? course.name : `Course ${courseId}`;
                     }).join(', ')}</li>
                   )}
-                  {/* Admin Selected Course and Center */}
                   {applicationDetails.adminSelectedCenter && (
                     <li><strong>Selected Center (Admin):</strong> {applicationDetails.adminSelectedCenter}</li>
                   )}
                   {applicationDetails.adminSelectedCourseId && (
                     <li><strong>Selected Course (Admin):</strong> {
-                        // Map course ID back to name
                         (
                             [
                                 { id: 1, name: 'Welding and Fabrication' },
@@ -606,7 +597,7 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                   )}
                   <li><strong>Submitted on:</strong> {applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}</li>
                   <li><strong>Last Updated:</strong> {applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}</li>
-                  <li><strong>Status Code:</strong> {applicationDetails.applicationStatus || 'N/A'}</li> {/* Use applicationStatus */}
+                  <li><strong>Status Code:</strong> {applicationDetails.applicationStatus || 'N/A'}</li>
                 </ul>
                 <div className="text-end mt-3">
                   <button className="btn btn-outline-secondary btn-sm" onClick={handleCopyDetails}>
@@ -625,28 +616,8 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           </div>
         )}
 
-        {/* Chart Section */}
-        <div className="status-card p-4">
-            <h5 className="mb-3 text-secondary text-center">Application Trends (Sample Data)</h5>
-            <ResponsiveContainer width="100%" height={300}>
-                <LineChart
-                    data={chartData}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e7ff" />
-                    <XAxis dataKey="name" stroke="#666" />
-                    <YAxis stroke="#666" />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="applications" stroke="#6366f1" activeDot={{ r: 8 }} name="Total Applications" />
-                    <Line type="monotone" dataKey="accepted" stroke="#10b981" name="Accepted Applications" />
-                </LineChart>
-            </ResponsiveContainer>
-            <p className="text-muted small text-center mt-3">
-                This chart shows sample data. In a real scenario, this would display
-                trends related to your application, e.g., progress through stages.
-            </p>
-        </div>
+        {/* Removed Chart Section */}
+        {/* This is where the chart section was previously located */}
 
         {/* Support Chat Toggle Button */}
         {!showChat && (
