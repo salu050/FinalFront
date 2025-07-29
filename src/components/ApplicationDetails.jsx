@@ -1,36 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { CSVLink } from 'react-csv';
-import {
-  Table,
-  InputGroup,
-  FormControl,
-  Button,
-  Card,
-  Row,
-  Col,
-  Spinner,
-  Badge,
-  ProgressBar,
-  Alert,
-} from 'react-bootstrap';
-import {
-  FaDownload,
-  FaChartBar,
-  FaUser,
-  FaSort,
-  FaFilter,
-  FaSearch,
-  FaArrowUp,
-  FaArrowDown,
-  FaSyncAlt,
-  FaClipboard,
-  FaCopy,
-  FaCheckCircle, // For Selected status icon in summary
-  FaHourglassHalf, // For Pending status icon in summary
-  FaTimesCircle, // For Rejected status icon in summary
-  FaDatabase, // For Total Applications icon in summary
-} from 'react-icons/fa';
-import 'bootstrap/dist/css/bootstrap.min.css';
+import React, { useEffect, useState, useCallback } from 'react';
+// Importing Font Awesome icons for the new summary cards
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faUsers, faHourglassHalf, faCheckCircle, faTimesCircle } from '@fortawesome/free-solid-svg-icons';
 
 // Modern status badge component
 const StatusBadge = ({ status }) => {
@@ -41,15 +12,14 @@ const StatusBadge = ({ status }) => {
   return <span className="badge rounded-pill bg-gradient-warning px-3 py-2 fs-6" style={{ background: "linear-gradient(90deg,#fbbf24,#f472b6 90%)", color: "#333" }}>Under Review</span>;
 };
 
-// Animated Select/Reject Button
-const AnimatedActionButton = ({ children, className, ...props }) => (
+// Animated Select Button
+const AnimatedButton = ({ children, className, ...props }) => (
   <button
     className={`btn shadow-sm fw-semibold ${className}`}
     style={{
       transition: "transform 0.17s cubic-bezier(.57,1.5,.53,1), box-shadow 0.2s",
       willChange: "transform",
       letterSpacing: 1,
-      minWidth: '70px'
     }}
     onMouseDown={e => e.currentTarget.style.transform = "scale(0.93)"}
     onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
@@ -60,212 +30,288 @@ const AnimatedActionButton = ({ children, className, ...props }) => (
   </button>
 );
 
-const BACKEND_BASE_URL = 'http://localhost:8082';
+// New Summary Card Component for the dashboard statistics
+const SummaryCard = ({ title, count, icon, cardBgColor }) => (
+  <div className="summary-card card text-white border-0 shadow-lg" style={{
+    background: cardBgColor,
+    borderRadius: "1rem",
+    minWidth: "220px",
+    flex: "1",
+    transition: "transform 0.3s ease, box-shadow 0.3s ease",
+    cursor: "pointer",
+    boxShadow: "0 4px 15px rgba(0,0,0,0.2)"
+  }}
+    onMouseEnter={e => {
+      e.currentTarget.style.transform = "translateY(-8px) scale(1.02)";
+      e.currentTarget.style.boxShadow = "0 8px 25px rgba(0,0,0,0.4)";
+    }}
+    onMouseLeave={e => {
+      e.currentTarget.style.transform = "translateY(0) scale(1)";
+      e.currentTarget.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
+    }}
+  >
+    <div className="card-body p-4 d-flex align-items-center justify-content-between">
+      <div>
+        <h5 className="card-title text-white mb-2" style={{ fontWeight: 600, letterSpacing: 1 }}>{title}</h5>
+        <h2 className="card-text fw-bold" style={{ fontSize: "2.5rem", textShadow: "0 2px 4px rgba(0,0,0,0.2)" }}>{count}</h2>
+      </div>
+      <div className="icon-circle d-flex align-items-center justify-content-center" style={{
+        backgroundColor: "rgba(255,255,255,0.15)",
+        borderRadius: "50%",
+        width: "60px",
+        height: "60px",
+        fontSize: "1.8rem",
+        color: "#fff"
+      }}>
+        <FontAwesomeIcon icon={icon} />
+      </div>
+    </div>
+  </div>
+);
 
 function ApplicationDetails() {
   const [applications, setApplications] = useState([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sortKey, setSortKey] = useState('fullname');
-  const [sortAsc, setSortAsc] = useState(true);
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [refreshing, setRefreshing] = useState(false);
-  const [showScroll, setShowScroll] = useState(false);
-  const [animRow, setAnimRow] = useState(null); // For row highlight animation
+  const [loadingApplications, setLoadingApplications] = useState(true);
+  const [actionMsg, setActionMsg] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState({});
+  const [animRow, setAnimRow] = useState(null);
+  const [allCourses, setAllCourses] = useState([]);
 
-  const [selectedCoursePerApplication, setSelectedCoursePerApplication] = useState({});
+  // Filter and Sort states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [sortBy, setSortBy] = useState('newest');
+
+  // Updated state for summary cards to reflect application stats
+  const [summary, setSummary] = useState({
+    totalApplicants: 0,
+    underReview: 0,
+    selected: 0,
+    rejected: 0,
+  });
+
+  // Helper function for fetching with improved error messages, now including auth token
+  const fetchData = useCallback(async (url, errorMessagePrefix, setStateCallback, setLoading = null) => {
+    if (setLoading) setLoading(true);
+    const token = localStorage.getItem('jwtToken');
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    try {
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('jwtToken');
+          localStorage.removeItem('user');
+          window.dispatchEvent(new Event('auth-logout'));
+          throw new Error("Authentication failed. Please log in again.");
+        }
+        const errorDetail = response.statusText ? `Status: ${response.status} - ${response.statusText}` : 'Unknown error';
+        throw new Error(`${errorMessagePrefix}: ${errorDetail}`);
+      }
+      const data = await response.json();
+      // Keep this existing log to inspect the raw fetched data
+      console.log(`Fetched data from ${url}:`, data);
+
+      // --- NEW DEBUGGING STEP: Check for duplicate IDs in the fetched data ---
+      if (url.includes('/api/dashboard/applicants')) {
+        const ids = data.map(item => item.id);
+        const uniqueIds = new Set(ids);
+        if (ids.length !== uniqueIds.size) {
+          const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+          console.error("CRITICAL ERROR: Duplicate application IDs found in fetched data:", duplicateIds, "Full data:", data);
+        }
+      }
+      // --- END NEW DEBUGGING STEP ---
+
+      setStateCallback(data);
+    } catch (err) {
+      console.error(err);
+      if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        setActionMsg(`Error: Cannot connect to backend. Please ensure your Spring Boot server is running on ${url.split('/')[2]}.`);
+      } else {
+        setActionMsg(err.message);
+      }
+    } finally {
+      if (setLoading) setLoading(false);
+    }
+  }, []);
+
+  // Effect to fetch all applications
+  const fetchApplications = useCallback(() => {
+    fetchData('http://localhost:8082/api/dashboard/applicants', 'Failed to fetch applicants for dashboard', setApplications, setLoadingApplications);
+  }, [fetchData]);
 
   useEffect(() => {
     fetchApplications();
-    window.addEventListener('scroll', handleScrollButton);
-    return () => window.removeEventListener('scroll', handleScrollButton);
-  }, []);
+  }, [fetchApplications]);
 
-  // Removed showToastNotify function as Toast components are removed
+  // Effect to fetch all courses for dropdown options
+  useEffect(() => {
+    fetchData('http://localhost:8082/api/courses', 'Failed to fetch courses', setAllCourses);
+  }, [fetchData]);
 
-  const fetchApplications = () => {
-    setLoading(true);
-    fetch(`${BACKEND_BASE_URL}/api/applications`)
-      .then(res => {
-        if (!res.ok) throw new Error('Network response was not ok');
-        return res.json();
-      })
-      .then(data => {
-        const initialSelectedCourses = {};
-        data.forEach(app => {
-            if (app.selectedCourseId) {
-                initialSelectedCourses[app.id] = app.selectedCourseId;
-            }
-        });
-        setApplications(data);
-        setSelectedCoursePerApplication(initialSelectedCourses);
-        setLoading(false);
-        // Removed showToastNotify call here
-      })
-      .catch((error) => {
-        console.error("Error fetching applications:", error);
-        setLoading(false);
-        // Removed showToastNotify call here
-      });
-  };
+  // Effect to calculate summary counts whenever applications change
+  useEffect(() => {
+    const totalApplicants = applications.length;
+    // CRITICAL FIX: Changed app.application_status to app.status here
+    const underReview = applications.filter(app => app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW').length;
+    // CRITICAL FIX: Changed app.application_status to app.status here
+    const selected = applications.filter(app => app.status === 'SELECTED').length;
+    // CRITICAL FIX: Changed app.application_status to app.status here
+    const rejected = applications.filter(app => app.status === 'REJECTED').length;
 
-  const handleSelectStudent = async (id) => {
-    const courseId = selectedCoursePerApplication[id];
+    setSummary({ totalApplicants, underReview, selected, rejected });
+  }, [applications]);
+
+  const handleSelectStudent = async (id, adminSelectedCenter) => {
+    setActionMsg('');
+    const courseId = selectedCourse[id];
     if (!courseId) {
-      // You might want to use a simple console.log or a basic alert substitute if needed
-      console.log('Please select a course before selecting the student.');
-      // alert('Please select a course before selecting the student.'); // Avoid alert in production
+      setActionMsg('Please select a course before selecting the student.');
       return;
     }
+    const token = localStorage.getItem('jwtToken');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     try {
       const response = await fetch(
-        `${BACKEND_BASE_URL}/api/applications/${id}/select/${courseId}`,
+        `http://localhost:8082/api/applications/${id}/select/${courseId}/${adminSelectedCenter}`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: headers
         }
       );
-      if (!response.ok) throw new Error('Failed to select student');
-      
-      setApplications(prevApps =>
-        prevApps.map(app =>
-          app.id === id
-            ? { ...app, applicationStatus: 'SELECTED', selectedCourseId: courseId }
-            : app
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('jwtToken');
+          localStorage.removeItem('user');
+          window.dispatchEvent(new Event('auth-logout'));
+          throw new Error("Authentication failed. Please log in again.");
+        }
+        const errorText = await response.text();
+        throw new Error(`Failed to select student: ${errorText}`);
+      }
+      // Update local state for immediate feedback
+      setApplications(apps =>
+        apps.map(app =>
+          // CRITICAL FIX: Changed application_status to status here
+          app.id === id ? { ...app, status: 'SELECTED', adminSelectedCourseId: courseId, adminSelectedCenter: adminSelectedCenter } : app
         )
       );
-      console.log('Student selected successfully!');
+      setActionMsg('Student selected!');
       setAnimRow(id);
       setTimeout(() => setAnimRow(null), 1200);
+
+      // IMPORTANT: Re-fetch all applications after successful action to ensure consistency with backend
+      fetchApplications();
+
     } catch (err) {
-      console.error('Error selecting student:', err.message);
-      // alert(`Error: ${err.message}`); // Avoid alert in production
+      console.error("Error selecting student:", err);
+      setActionMsg(err.message);
     }
   };
 
   const handleRejectStudent = async (id) => {
+    setActionMsg('');
+    const token = localStorage.getItem('jwtToken');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     try {
       const response = await fetch(
-        `${BACKEND_BASE_URL}/api/applications/${id}/reject`,
+        `http://localhost:8082/api/applications/${id}/reject`,
         {
           method: 'POST',
+          headers: headers
         }
       );
-      if (!response.ok) throw new Error('Failed to reject student');
-      
-      setApplications(prevApps =>
-        prevApps.map(app =>
-          app.id === id ? { ...app, applicationStatus: 'REJECTED' } : app
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('jwtToken');
+          localStorage.removeItem('user');
+          window.dispatchEvent(new Event('auth-logout'));
+          throw new Error("Authentication failed. Please log in again.");
+        }
+        const errorText = await response.text();
+        throw new Error(`Failed to reject student: ${errorText}`);
+      }
+      // Update local state for immediate feedback
+      setApplications(apps =>
+        apps.map(app =>
+          // CRITICAL FIX: Changed application_status to status here
+          app.id === id ? { ...app, status: 'REJECTED' } : app
         )
       );
-      console.log('Student rejected!');
+      setActionMsg('Student rejected!');
       setAnimRow(id);
       setTimeout(() => setAnimRow(null), 1200);
+
+      // IMPORTANT: Re-fetch all applications after successful action to ensure consistency with backend
+      fetchApplications();
+
     } catch (err) {
-      console.error('Error rejecting student:', err.message);
-      // alert(`Error: ${err.message}`); // Avoid alert in production
+      console.error("Error rejecting student:", err);
+      setActionMsg(err.message);
     }
   };
 
-  const filteredApplications = applications
-    .filter(app =>
-      (
-        (app.fullname || app.fullName || '').toLowerCase().includes(search.toLowerCase()) ||
-        (app.course || app.courseName || '').toLowerCase().includes(search.toLowerCase()) ||
-        (app.center || '').toLowerCase().includes(search.toLowerCase()) ||
-        (app.username || '').toLowerCase().includes(search.toLowerCase())
-      )
-      && (filterStatus === 'All' || app.applicationStatus === filterStatus)
-    )
+  // Filtered and sorted applications based on state
+  const filteredAndSortedApplications = applications
+    .filter(app => {
+      // Search filter
+      const lowerCaseSearchTerm = searchTerm.toLowerCase();
+      const matchesSearch = (
+        (app.fullname && app.fullname.toLowerCase().includes(lowerCaseSearchTerm)) ||
+        (app.center && app.center.toLowerCase().includes(lowerCaseSearchTerm)) ||
+        (app.educationLevel && app.educationLevel.toLowerCase().includes(lowerCaseSearchTerm)) ||
+        (app.id && app.id.toString().includes(lowerCaseSearchTerm)) ||
+        (app.registrationNumber && app.registrationNumber.toLowerCase().includes(lowerCaseSearchTerm))
+      );
+
+      // Status filter
+      let matchesStatus = false;
+      if (filterStatus === 'All') {
+        matchesStatus = true;
+      } else if (filterStatus === 'SUBMITTED') {
+        // CRITICAL FIX: Changed app.application_status to app.status here
+        matchesStatus = app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW';
+      } else {
+        // CRITICAL FIX: Changed app.application_status to app.status here
+        matchesStatus = (app.status && app.status.toUpperCase() === filterStatus.toUpperCase());
+      }
+      return matchesSearch && matchesStatus;
+    })
     .sort((a, b) => {
-      const aVal = (a[sortKey] || a[sortKey.charAt(0).toUpperCase() + sortKey.slice(1)] || '').toLowerCase();
-      const bVal = (b[sortKey] || b[sortKey].charAt(0).toUpperCase() + b[sortKey].slice(1) || '').toLowerCase();
-      if (aVal < bVal) return sortAsc ? -1 : 1;
-      if (aVal > bVal) return sortAsc ? 1 : -1;
-      return 0;
+      // Sort by date (assuming 'createdAt' is available on the DTO)
+      const dateA = new Date(a.createdAt);
+      const dateB = new Date(b.createdAt);
+      if (sortBy === 'newest') {
+        return dateB.getTime() - dateA.getTime();
+      } else { // 'oldest'
+        return dateA.getTime() - dateB.getTime();
+      }
     });
 
-  const csvHeaders = [
-    { label: 'ID', key: 'id' },
-    { label: 'Full Name', key: 'fullname' },
-    { label: 'Username', key: 'username' },
-    { label: 'Center', key: 'center' },
-    { label: 'Selected Course ID', key: 'selectedCourseId' },
-    { label: 'Application Status', key: 'applicationStatus' },
-  ];
-
-  const dataForCsv = filteredApplications.map(app => ({
-    id: app.id,
-    fullname: app.fullname || app.fullName || '',
-    username: app.username || '',
-    center: app.center || '',
-    selectedCourseId: app.selectedCourseId || '',
-    applicationStatus: app.applicationStatus || '',
-  }));
-
-  const copyFilteredToClipboard = async () => {
-    const rows = [
-      csvHeaders.map(h => h.label).join(','),
-      ...filteredApplications.map(app =>
-        [
-          app.id,
-          app.fullname || app.fullName || '',
-          app.username || '',
-          app.center || '',
-          app.selectedCourseId || '',
-          app.applicationStatus || '',
-        ].map(v => `"${(v + '').replace(/"/g, '""')}"`).join(',')
-      ),
-    ].join('\n');
-    try {
-      await navigator.clipboard.writeText(rows);
-      console.log("Visible table copied to clipboard!");
-    } catch (err) {
-      console.error("Failed to copy to clipboard:", err);
-    }
-  };
-
-  function handleScrollButton() {
-    if (window.scrollY > 300) setShowScroll(true);
-    else setShowScroll(false);
-  }
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchApplications();
-    setRefreshing(false);
-  };
-
-  const glassStyle = {
-    background: 'rgba(30, 34, 56, 0.96)',
-    boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.18)',
-    borderRadius: '18px',
-    border: '1px solid rgba(255,255,255,0.10)',
-    backdropFilter: 'blur(8px)',
-    color: '#fff',
-    transition: 'background 0.5s, color 0.5s'
-  };
-
-  const getSortIcon = (key) => {
-    if (sortKey !== key) return <FaSort />;
-    return sortAsc ? <FaArrowUp color="#2196F3" /> : <FaArrowDown color="#e53935" />;
-  };
-
-  const totalApplications = applications.length;
-  const selectedCount = applications.filter(app => app.applicationStatus === 'SELECTED').length;
-  const pendingCount = applications.filter(app => app.applicationStatus === 'PENDING' || app.applicationStatus === 'UNDER_REVIEW').length;
-  const rejectedCount = applications.filter(app => app.applicationStatus === 'REJECTED').length;
-
+  // Add global style for modern and animated UI and dark background
   useEffect(() => {
     const styleId = "appdetails-modern-style";
     if (!document.getElementById(styleId)) {
       const style = document.createElement("style");
       style.id = styleId;
       style.innerHTML = `
+      /* General Table and Badge Styles */
       .modern-table th, .modern-table td {
         vertical-align: middle !important;
-        padding: 12px 10px; /* Slightly more padding for table cells */
       }
       .modern-table th {
         border-bottom: 2.5px solid #6366f1 !important;
@@ -273,7 +319,7 @@ function ApplicationDetails() {
         color: #fff !important;
         font-size: 1rem;
         letter-spacing: 1px;
-        white-space: nowrap; /* Prevent headers from wrapping */
+        padding: 1rem 0.75rem; /* Increased padding for headers */
       }
       .modern-table tr {
         transition: background 0.22s, box-shadow 0.22s;
@@ -288,399 +334,276 @@ function ApplicationDetails() {
       }
       .modern-table tbody tr:hover {
         background: #273352 !important;
-        box-shadow: 0 2px 16px rgba(20,30,48,0.8); /* Stronger shadow on hover */
-        transform: translateY(-2px); /* Slight lift on hover */
+        box-shadow: 0 2px 16px #141e30cc;
       }
       .bg-gradient-success { background: linear-gradient(90deg,#43e97b,#38f9d7 90%) !important; }
       .bg-gradient-danger { background: linear-gradient(90deg,#f43f5e,#fb7185 90%) !important; }
       .bg-gradient-warning { background: linear-gradient(90deg,#fbbf24,#f472b6 90%) !important; }
-      .modern-select:focus {
-        box-shadow: 0 0 0 0.17rem #6366f180;
-        border-color: #6366f1;
-      }
-      .appdetails-bg-dark { /* Renamed for clarity - this is the main background class */
-        background: linear-gradient(135deg,#1A202C,#2D3748 80%) !important; /* Darker, more consistent background */
-        color: #f7f8fa !important;
-        min-height: 100vh; /* Ensure it covers full viewport height */
-        padding-bottom: 50px;
-      }
-      .appdetails-bg-dark .card,
-      .appdetails-bg-dark .modern-table th,
-      .appdetails-bg-dark .modern-table td {
-        background: transparent !important;
-        color: #f7f8fa !important;
-      }
-      .appdetails-bg-dark .form-select,
-      .appdetails-bg-dark .form-control {
-        background: #2D3748 !important; /* Deeper input background */
-        color: #f7f8fa !important;
-        border-color: #4A5568 !important; /* Softer border color */
-      }
-      .appdetails-bg-dark .alert {
-        background: #2D3748 !important;
-        color: #A0AEC0 !important;
-        border-color: #4A5568 !important;
-      }
-      .appdetails-bg-dark .btn-outline-info {
-        color: #38bdf8 !important;
-        border-color: #38bdf8 !important;
-      }
-      .appdetails-bg-dark .btn-outline-secondary {
-        color: #cbd5e0 !important;
-        border-color: #cbd5e0 !important;
-      }
-      .appdetails-bg-dark .btn-outline-primary {
-        color: #6366f1 !important;
+      .modern-select:focus, .modern-input:focus {
+        box-shadow: 0 0 0 0.17rem #6366f180 !important;
         border-color: #6366f1 !important;
       }
 
-      /* Card hover animation */
-      .summary-card {
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      /* Main background and text color for the entire component */
+      .appdetails-bg-ministry {
+        background: linear-gradient(135deg,#141e30,#243b55 80%) !important;
+        color: #f7f8fa !important;
       }
-      .summary-card:hover {
-        transform: translateY(-5px) scale(1.02);
-        box-shadow: 0 12px 25px rgba(0, 0, 0, 0.4), 0 0 30px rgba(100,200,255,0.5); /* Enhanced shadow on hover */
+      /* Ensure inner cards, table headers/cells inherit text color, and have transparent backgrounds */
+      .appdetails-bg-ministry .card,
+      .appdetails-bg-ministry .modern-table th,
+      .appdetails-bg-ministry .modern-table td {
+        background: transparent !important;
+        color: #f7f8fa !important;
+      }
+      /* Hover effect for table rows in dark theme */
+      .appdetails-bg-ministry .modern-table tbody tr:hover {
+        background: #232f45 !important;
+      }
+      /* Styling for form controls (select, input) in dark theme */
+      .appdetails-bg-ministry .form-select,
+      .appdetails-bg-ministry .form-control {
+        background: #1a2236 !important;
+        color: #f7f8fa !important;
+        border-color: #6366f1 !important; /* Accent border color */
+        padding: 0.6rem 1rem; /* Adjust padding for better look */
+      }
+      .appdetails-bg-ministry .form-select option {
+        background: #1a2236; /* Background for dropdown options */
+        color: #f7f8fa;
+      }
+      /* Styling for alert messages */
+      .appdetails-bg-ministry .alert {
+        background: #232946 !important;
+        border: 1.5px solid #6366f1;
+        color: #a5b4fc !important;
+        border-radius: 1rem;
+        font-weight: 500;
+        letter-spacing: 1px;
+      }
+      /* Border radius for filter/search controls */
+      .filter-control-group .form-control,
+      .filter-control-group .form-select {
+        border-radius: 0.7rem;
       }
 
-      /* Heading gradient animation */
-      .animated-heading {
-        animation: gradient-flow 8s ease infinite alternate;
-        background-size: 200% auto;
-      }
-      @keyframes gradient-flow {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-      }
-
-      /* Placeholder for modern form control text color */
-      .form-control::placeholder {
-        color: #a0aec0 !important; /* Lighter placeholder text */
-        opacity: 0.8;
-      }
-      .form-control, .form-select {
-        color: #f7f8fa !important; /* Ensure input text is light */
+      /* Responsive adjustments for summary cards */
+      @media (max-width: 768px) {
+        .summary-card {
+          min-width: 100%; /* Full width on small screens */
+          margin-bottom: 1rem;
+        }
       }
       `;
       document.head.appendChild(style);
     }
   }, []);
 
-  const subtitle = "Streamline student selection, manage applications, and gain insights into enrollment trends with precision and ease.";
-
   return (
-    <div className="appdetails-bg-dark">
-      {/* Scroll to top button */}
-      {showScroll && (
-        <Button
-          onClick={scrollToTop}
-          style={{
-            position: 'fixed',
-            bottom: 30,
-            right: 30,
-            borderRadius: '50%',
-            zIndex: 999,
-            boxShadow: '0 4px 12px rgba(60,60,120,0.4)',
-            background: '#2196F3',
-            color: '#fff',
-            width: 48,
-            height: 48,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <FaArrowUp />
-        </Button>
-      )}
-
-      <div className="container py-5">
-        <Row className="mb-4">
-          <Col>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              marginBottom: '1rem'
-            }}>
-              <h1
-                className="fw-bold animated-heading"
-                style={{
-                  background: "linear-gradient(90deg, #6366f1, #43e97b, #fa8bff 80%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  fontFamily: "Poppins, Arial, sans-serif",
-                  letterSpacing: 2,
-                  fontSize: "2.7rem",
-                  textShadow: "0 8px 32px rgba(35,43,64,0.17), 0 1px 5px #1e293b",
-                  textAlign: "center"
-                }}
-              >
-                <FaUser className="me-2" style={{ color: "#4f8cff" }} />
-                Student Application Management
-              </h1>
-              <h5 style={{
-                color: "#a5b4fc",
-                fontWeight: 400,
-                textAlign: "center",
-                maxWidth: 780,
-                margin: "0.5rem auto 0 auto",
-                letterSpacing: 1,
-                fontStyle: "italic"
-              }}>
-                {subtitle}
-              </h5>
-            </div>
-          </Col>
-        </Row>
-
-        {/* Summary Cards Section */}
-        <Row className="mb-4 g-3">
-          <Col md={3}>
-            <Card style={glassStyle} className="text-center shadow-sm summary-card">
-              <Card.Body>
-                <Card.Title><FaDatabase /><span className="ms-1">Total Applications</span></Card.Title>
-                <h3 className="display-6">{totalApplications}</h3>
-                <small className="text-info">Overall count</small>
-                <ProgressBar now={100} variant="info" style={{ height: "0.4rem", marginTop: 8 }} />
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md={3}>
-            <Card style={glassStyle} className="text-center shadow-sm summary-card">
-              <Card.Body>
-                <Card.Title><FaCheckCircle /><span className="ms-1">Selected</span></Card.Title>
-                <h3 className="display-6">{selectedCount}</h3>
-                <small className="text-success">Students selected</small>
-                <ProgressBar now={(selectedCount / (totalApplications || 1)) * 100} variant="success" style={{ height: "0.4rem", marginTop: 8 }} />
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md={3}>
-            <Card style={glassStyle} className="text-center shadow-sm summary-card">
-              <Card.Body>
-                <Card.Title><FaHourglassHalf /><span className="ms-1">Pending</span></Card.Title>
-                <h3 className="display-6">{pendingCount}</h3>
-                <small className="text-warning">Under review</small>
-                <ProgressBar now={(pendingCount / (totalApplications || 1)) * 100} variant="warning" style={{ height: "0.4rem", marginTop: 8 }} />
-              </Card.Body>
-            </Card>
-          </Col>
-          <Col md={3}>
-            <Card style={glassStyle} className="text-center shadow-sm summary-card">
-              <Card.Body>
-                <Card.Title><FaTimesCircle /><span className="ms-1">Rejected</span></Card.Title>
-                <h3 className="display-6">{rejectedCount}</h3>
-                <small className="text-danger">Applications rejected</small>
-                <ProgressBar now={(rejectedCount / (totalApplications || 1)) * 100} variant="danger" style={{ height: "0.4rem", marginTop: 8 }} />
-              </Card.Body>
-            </Card>
-          </Col>
-        </Row>
-
-        {/* Search, Filter, Refresh, Download Controls */}
-        <Row className="mb-3 g-2">
-          <Col md={5}>
-            <InputGroup>
-              <InputGroup.Text style={glassStyle}><FaSearch /></InputGroup.Text>
-              <FormControl
-                placeholder="Search by name, course, center, or username"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={glassStyle}
-                className="border-primary"
-              />
-              <Button variant="outline-primary" onClick={handleRefresh} disabled={refreshing} style={glassStyle}>
-                <FaSyncAlt className={refreshing ? "fa-spin" : ""} /> {refreshing ? "Refreshing..." : "Refresh"}
-              </Button>
-            </InputGroup>
-          </Col>
-          <Col md={3}>
-            <InputGroup>
-              <InputGroup.Text style={glassStyle}><FaFilter /></InputGroup.Text>
-              <FormControl
-                as="select"
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-                style={glassStyle}
-                className="border-primary"
-              >
-                <option value="All">All Status</option>
-                <option value="SELECTED">Selected</option>
-                <option value="PENDING">Pending</option>
-                <option value="UNDER_REVIEW">Under Review</option>
-                <option value="REJECTED">Rejected</option>
-              </FormControl>
-            </InputGroup>
-          </Col>
-          <Col md={4} className="d-flex justify-content-end align-items-center">
-            <CSVLink
-              data={dataForCsv}
-              headers={csvHeaders}
-              filename={"applicant-management-report.csv"}
-              className="btn btn-outline-info me-2"
-              style={{ borderRadius: 50, fontWeight: 500, color: "#38bdf8", borderColor: "#38bdf8", background: 'rgba(56, 189, 248, 0.1)' }}
-            >
-              <FaDownload /> Download CSV
-            </CSVLink>
-            <Button
-              variant="outline-secondary"
-              onClick={copyFilteredToClipboard}
-              title="Copy visible table to clipboard"
-              style={{ borderRadius: 50, fontWeight: 500, color: "#cbd5e0", borderColor: "#cbd5e0", background: 'rgba(203, 213, 224, 0.1)' }}
-            >
-              <FaClipboard /> Copy Table
-            </Button>
-          </Col>
-        </Row>
-
-        {/* Applications Table */}
-        <Card style={glassStyle} className="mb-4 shadow">
-          <Card.Body>
-            {loading ? (
-              <div className="text-center py-5">
-                <Spinner animation="border" variant="primary" style={{ width: '3rem', height: '3rem' }} />
-                <p className="mt-3 text-white">Loading applications...</p>
-              </div>
-            ) : filteredApplications.length === 0 ? (
-              <div className="text-center py-5">
-                <Alert variant="info" className="mb-0" style={{ ...glassStyle, background: 'rgba(45, 55, 72, 0.8) !important', color: '#a0aec0 !important' }}>
-                  No applications found matching your criteria.
-                </Alert>
-              </div>
-            ) : (
-              <div className="table-responsive" style={{ maxHeight: 'calc(100vh - 450px)', overflowY: 'auto' }}>
-                <Table
-                  striped
-                  bordered
-                  hover
-                  responsive
-                  variant="dark"
-                  className="mb-0 modern-table"
-                  style={{
-                    borderRadius: 16,
-                    overflow: 'hidden',
-                    fontSize: 17,
-                    letterSpacing: 0.1,
-                    boxShadow: '0 4px 32px 0 rgba(31, 38, 135, 0.04)'
-                  }}
-                >
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th
-                        onClick={() => { setSortKey('fullname'); setSortAsc(sk => !sk); }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        Full Name {getSortIcon('fullname')}
-                      </th>
-                      <th
-                        onClick={() => { setSortKey('center'); setSortAsc(sk => !sk); }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        Center {getSortIcon('center')}
-                      </th>
-                      <th
-                        onClick={() => { setSortKey('courses'); setSortAsc(sk => !sk); }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        Courses {getSortIcon('courses')}
-                      </th>
-                      <th
-                        onClick={() => { setSortKey('applicationStatus'); setSortAsc(sk => !sk); }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        Application Status {getSortIcon('applicationStatus')}
-                      </th>
-                      <th>Username</th>
-                      <th className="text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredApplications.map(app => (
-                      <tr key={app.id} className={animRow === app.id ? "modern-row-anim" : ""}>
-                        <td>{app.id}</td>
-                        <td className="fw-semibold" style={{ letterSpacing: 1 }}>{app.fullname || app.fullName}</td>
-                        <td style={{ fontWeight: 500 }}>{app.center}</td>
-                        <td>
-                          <select
-                            className="form-select form-select-sm modern-select"
-                            value={selectedCoursePerApplication[app.id] || ''}
-                            onChange={e =>
-                              setSelectedCoursePerApplication({
-                                ...selectedCoursePerApplication,
-                                [app.id]: e.target.value,
-                              })
-                            }
-                            disabled={app.applicationStatus === 'SELECTED' || app.applicationStatus === 'REJECTED'}
-                            style={{
-                              background: "#1a2236",
-                              borderRadius: "0.7rem",
-                              border: '1.2px solid #6366f1',
-                              fontWeight: 500,
-                              fontSize: '0.9rem',
-                              color: "#f7f8fa"
-                            }}
-                          >
-                            <option value="">--Select Course--</option>
-                            {(app.courses || []).map(course => (
-                              <option key={course.id} value={course.id}>
-                                {course.name}
-                              </option>
-                            ))}
-                          </select>
-                          {app.selectedCourseId && app.applicationStatus === 'SELECTED' && (
-                            <div className="mt-1" style={{ fontSize: '0.85rem', color: '#bbf7d0' }}>
-                              Selected: {app.courses.find(c => c.id === app.selectedCourseId)?.name || 'N/A'}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          <StatusBadge status={app.applicationStatus} />
-                        </td>
-                        <td>
-                          <span>{app.username}</span>
-                        </td>
-                        <td className="text-center">
-                          <AnimatedActionButton
-                            className="btn-success btn-sm me-2"
-                            onClick={() => handleSelectStudent(app.id)}
-                            disabled={
-                              app.applicationStatus === 'SELECTED' ||
-                              app.applicationStatus === 'REJECTED' ||
-                              !selectedCoursePerApplication[app.id]
-                            }
-                            style={{
-                              background: "linear-gradient(90deg,#43e97b,#38f9d7 90%)",
-                              border: "none",
-                              color: "#fff"
-                            }}
-                          >
-                            <span style={{ fontWeight: 700, letterSpacing: 1 }}>Select</span>
-                          </AnimatedActionButton>
-                          <AnimatedActionButton
-                            className="btn-danger btn-sm"
-                            onClick={() => handleRejectStudent(app.id)}
-                            disabled={app.applicationStatus === 'REJECTED' || app.applicationStatus === 'SELECTED'}
-                            style={{
-                              background: "linear-gradient(90deg,#f43f5e,#fb7185 90%)",
-                              border: "none",
-                              color: "#fff"
-                            }}
-                          >
-                            <span style={{ fontWeight: 700, letterSpacing: 1 }}>Reject</span>
-                          </AnimatedActionButton>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-            )}
-          </Card.Body>
-        </Card>
+    <div className="card shadow-lg p-4 appdetails-bg-ministry" style={{
+      borderRadius: "1.5rem",
+      background: '#1a2236', // Main card background
+      color: '#f7f8fa',
+      boxShadow: "0 8px 32px rgba(99,102,241,0.2)" // Stronger shadow for the main card
+    }}>
+      <div className="text-center mb-5">
+        <h4 className="mb-2 fw-bold" style={{
+          fontSize: "2.5rem",
+          letterSpacing: 2,
+          color: "#fff" // White color for the heading to match the image
+        }}>
+          Admin Dashboard
+        </h4>
+        <p className="mb-4 fw-light text-center" style={{ fontSize: "1rem", maxWidth: "600px", margin: "auto", color: "#a5b4fc" }}>
+          Welcome to your <span className="fw-bold" style={{ color: "#fff" }}>powerful</span> & <span className="fw-bold" style={{ color: "#fff" }}>modern</span> administration panel. Manage application details, to select only qualified applicants, and reject those unqualified applicants to join in various programs based on their choice!
+        </p>
       </div>
+
+      {/* NEW: Summary Cards section - Centered using justify-content-center */}
+      <div className="d-flex flex-wrap justify-content-center align-items-stretch gap-3 mb-5">
+        <SummaryCard
+          title="Total Applicants"
+          count={summary.totalApplicants}
+          icon={faUsers} // Icon for total applicants
+          cardBgColor="linear-gradient(45deg, #6366f1, #8b5cf6)" // Purple-blue gradient for Total
+        />
+        <SummaryCard
+          title="Selected"
+          count={summary.selected}
+          icon={faCheckCircle} // Icon for selected
+          cardBgColor="linear-gradient(45deg, #22c55e, #34d399)" // Green gradient for Selected
+        />
+        <SummaryCard
+          title="Under Review"
+          count={summary.underReview}
+          icon={faHourglassHalf} // Icon for under review
+          cardBgColor="linear-gradient(45deg, #f97316, #facc15)" // Orange-yellow gradient for Under Review
+        />
+        <SummaryCard
+          title="Rejected"
+          count={summary.rejected}
+          icon={faTimesCircle} // Icon for rejected
+          cardBgColor="linear-gradient(45deg, #ef4444, #f87171)" // Red gradient for Rejected
+        />
+      </div>
+
+      {/* Filter and Search Controls */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3 filter-control-group">
+        <input
+          type="text"
+          className="form-control modern-input flex-grow-1"
+          placeholder="Search by ID, Name, Education, Center, or Reg. Number..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ maxWidth: '500px' }}
+        />
+        <select
+          className="form-select modern-select flex-grow-0"
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          style={{ maxWidth: '200px' }}
+        >
+          <option value="All">All Status</option>
+          <option value="SUBMITTED">Under Review</option>
+          <option value="SELECTED">Selected</option>
+          <option value="REJECTED">Rejected</option>
+        </select>
+        <select
+          className="form-select modern-select flex-grow-0"
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          style={{ maxWidth: '180px' }}
+        >
+          <option value="newest">Sort by Newest</option>
+          <option value="oldest">Sort by Oldest</option>
+        </select>
+      </div>
+
+      {loadingApplications ? (
+        <div className="text-center py-4">
+          <div className="spinner-border text-primary mb-2" />
+          <div>Loading applications...</div>
+        </div>
+      ) : (
+        <div className="table-responsive">
+          <table className="table table-bordered align-middle modern-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Full Name</th>
+                <th>Education Level</th>
+                <th>Center</th>
+                <th>Preferred Course</th>
+                <th>Registration Number</th>
+                <th>Submission Date</th>
+                <th>Status</th>
+                <th className="text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAndSortedApplications.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="text-center py-4">No applications found matching your criteria.</td>
+                </tr>
+              ) : (
+                filteredAndSortedApplications.map(app => (
+                  <tr key={app.id} className={animRow === app.id ? "modern-row-anim" : ""}>
+                    <td>{app.id}</td>
+                    <td className="fw-semibold" style={{ letterSpacing: 1 }}>{app.fullname}</td>
+                    <td style={{ fontWeight: 500 }}>{app.educationLevel}</td>
+                    <td style={{ fontWeight: 500 }}>{app.center}</td>
+                    <td>
+                      <select
+                        className="form-select form-select-sm modern-select"
+                        value={selectedCourse[app.id] || ''}
+                        onChange={e =>
+                          setSelectedCourse({
+                            ...selectedCourse,
+                            [app.id]: e.target.value,
+                          })
+                        }
+                        // CRITICAL FIX: Changed app.application_status to app.status here
+                        disabled={app.status === 'SELECTED' || app.status === 'REJECTED'}
+                        style={{
+                          background: "#1a2236",
+                          borderRadius: "0.7rem",
+                          border: '1.2px solid #6366f1',
+                          fontWeight: 500,
+                          fontSize: '1rem',
+                          color: "#f7f8fa"
+                        }}
+                      >
+                        <option value="">--Select Course--</option>
+                        {/* Filter out duplicate course IDs before mapping to options */}
+                        {Array.from(new Set(app.preferredCourses || [])).map(courseId => {
+                          const course = allCourses.find(c => c.id === courseId);
+                          return course ? (
+                            <option key={`${app.id}-${course.id}`} value={course.id}>
+                              {course.name}
+                            </option>
+                          ) : null;
+                        })}
+                      </select>
+                    </td>
+                    {/* Display registrationNumber */}
+                    <td style={{ fontWeight: 500 }}>{app.registrationNumber || 'N/A'}</td>
+                    {/* Display Submission Date */}
+                    <td>{app.createdAt ? new Date(app.createdAt).toLocaleDateString() : 'N/A'}</td>
+                    <td>
+                      {/* CRITICAL FIX: Changed app.application_status to app.status here */}
+                      <StatusBadge status={app.status} />
+                    </td>
+                    <td className="text-center">
+                      <AnimatedButton
+                        className="btn-success btn-sm me-2"
+                        onClick={() => handleSelectStudent(app.id, app.center)}
+                        // CRITICAL FIX: Changed app.application_status to app.status here
+                        disabled={
+                          app.status === 'SELECTED' ||
+                          app.status === 'REJECTED' ||
+                          !selectedCourse[app.id]
+                        }
+                        style={{
+                          background: "linear-gradient(90deg,#43e97b,#38f9d7 90%)",
+                          border: "none",
+                          color: "#fff"
+                        }}
+                      >
+                        <span style={{ fontWeight: 700, letterSpacing: 1 }}>Select</span>
+                      </AnimatedButton>
+                      <AnimatedButton
+                        className="btn-danger btn-sm"
+                        onClick={() => handleRejectStudent(app.id)}
+                        // CRITICAL FIX: Changed app.application_status to app.status here
+                        disabled={app.status === 'REJECTED' || app.status === 'SELECTED'}
+                        style={{
+                          background: "linear-gradient(90deg,#f43f5e,#fb7185 90%)",
+                          border: "none",
+                          color: "#fff"
+                        }}
+                      >
+                        <span style={{ fontWeight: 700, letterSpacing: 1 }}>Reject</span>
+                      </AnimatedButton>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {actionMsg && (
+        <div className="alert alert-info mt-3 text-center animated fadeInDown" style={{
+          background: "#232946",
+          border: "1.5px solid #6366f1",
+          color: "#a5b4fc",
+          borderRadius: "1rem",
+          fontWeight: 500,
+          letterSpacing: 1
+        }}>
+          {actionMsg}
+        </div>
+      )}
     </div>
   );
 }

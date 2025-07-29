@@ -33,7 +33,7 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
     nationality: userDetails?.nationality || '',
     idType: userDetails?.idType || '',
     idNumber: userDetails?.idNumber || '',
-    contactPhone: userDetails?.contactPhone || '',
+    registrationNumber: userDetails?.registrationNumber || '', // Renamed from contactPhone
     contactEmail: userDetails?.contactEmail || userDetails?.username || '', // Use username as fallback for email
     educationLevel: userDetails?.educationLevel || '',
     previousSchool: userDetails?.previousSchool || '',
@@ -89,6 +89,8 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
         dateOfBirth: userDetails.applicationDetails.dateOfBirth
           ? new Date(userDetails.applicationDetails.dateOfBirth).toISOString().split('T')[0]
           : '',
+        // Update registrationNumber if it was part of applicationDetails
+        registrationNumber: userDetails.applicationDetails.registrationNumber || '',
         // Also update course selections if they are part of applicationDetails
         course1: userDetails.applicationDetails.course1 || '',
         course2: userDetails.applicationDetails.course2 || '',
@@ -123,10 +125,10 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
     // Basic validation
     const requiredFields = [
         'fullName', 'dateOfBirth', 'gender', 'nationality', 'idType',
-        'idNumber', 'contactPhone', 'contactEmail', 'educationLevel',
+        'idNumber', 'registrationNumber', 'contactEmail', 'educationLevel', // Updated: registrationNumber
         'previousSchool', 'selectedCenter'
     ];
-    
+
     for (const field of requiredFields) {
         if (!formData[field] || (typeof formData[field] === 'string' && !formData[field].trim())) {
             setError(`Please fill in the '${field.replace(/([A-Z])/g, ' $1').toLowerCase()}' field.`);
@@ -159,7 +161,13 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
         preferredCourses: selectedCourses, // Send as an array of course IDs
         // Ensure dateOfBirth is sent in a format your backend expects (e.g., ISO string)
         dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : null,
+        // Rename contactPhone to registrationNumber in payload if needed by backend
+        // If backend still expects 'contactPhone' for some reason, map 'registrationNumber' back
+        // For now, assuming backend will accept 'registrationNumber'
       };
+      // Delete the old contactPhone if it exists in the payload, and registrationNumber is the new field
+      delete applicationPayload.contactPhone;
+
 
       // IMPORTANT: Use the configured axios instance for authenticated requests
       // The backend endpoint is /api/applications (POST)
@@ -168,7 +176,7 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
       if (response.status === 200 || response.status === 201) {
         setSuccess('Application submitted successfully!');
         setIsSubmitted(true); // Mark as submitted
-        
+
         // IMPORTANT: Update the userDetails in App.jsx with the new application data
         // This ensures the App's global state reflects the submission status.
         if (onSubmitDetails && userDetails) {
@@ -303,13 +311,13 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
                 <h5 className="mb-3 text-secondary">Contact Information</h5>
               </div>
               <div className="col-md-6">
-                <label htmlFor="contactPhone" className="form-label">Phone Number</label>
+                <label htmlFor="registrationNumber" className="form-label">Registration Number</label> {/* Renamed label */}
                 <input
-                  type="tel"
+                  type="text" // Changed type from tel to text
                   className="form-control"
-                  id="contactPhone"
-                  name="contactPhone"
-                  value={formData.contactPhone}
+                  id="registrationNumber" // Renamed id
+                  name="registrationNumber" // Renamed name
+                  value={formData.registrationNumber}
                   onChange={handleChange}
                   required
                 />
@@ -377,7 +385,7 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
                   ))}
                 </select>
               </div>
-              
+
               {/* Preferred Courses (up to 5 choices) */}
               <div className="col-12">
                 <p className="text-muted small mb-2">Select up to 5 course choices in order of preference.</p>
@@ -410,7 +418,7 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
                   </div>
                 </div>
               )}
-              
+
               {success && (
                 <div className="col-12 mt-4">
                   <div className="alert alert-success text-center">
@@ -418,7 +426,7 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
                   </div>
                 </div>
               )}
-              
+
               {/* Submit Button */}
               <div className="col-12 text-center mt-4">
                 <button
@@ -437,7 +445,7 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
             </div>
           </form>
         )}
-        
+
         <div className="text-center mt-4">
           <p className="text-muted small">
             Need help? <a href="mailto:support@veta.go.tz">Contact Support</a>
