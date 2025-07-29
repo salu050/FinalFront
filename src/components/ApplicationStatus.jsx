@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from '../api/axiosConfig.jsx'; // Import the configured axios instance
-import { FaCheckCircle, FaTimesCircle, FaRegSmileBeam, FaSpinner, FaInfoCircle, FaClipboard } from 'react-icons/fa';
-// Removed: import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { FaCheckCircle, FaTimesCircle, FaRegSmileBeam, FaSpinner, FaInfoCircle, FaClipboard, FaChartLine, FaBell, FaUpload, FaCalendarAlt, FaTimes } from 'react-icons/fa'; // Added more icons
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'; // Recharts imports
 
 // For LLM integration
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=";
-const API_KEY = ""; // Canvas will inject the API key at runtime
+const API_KEY = "AIzaSyDSmIJbi6mu-ycXsn7qJam8BhhPN7rx_3o"; // Canvas will inject the API key at runtime
 
 // Helper function for exponential backoff
 const exponentialBackoffFetch = async (url, options, retries = 3, delay = 1000) => {
@@ -35,16 +35,27 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
   const [applicationDetails, setApplicationDetails] = useState(userDetails?.applicationDetails || null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showDetails, setShowDetails] = useState(true); // Toggle for application details
-  const [showChat, setShowChat] = useState(false); // Toggle for chat widget
+  const [showDetails, setShowDetails] = useState(true);
+  const [showChart, setShowChart] = useState(true); // Default to showing chart for modern feel
+  const [showChat, setShowChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const [copyMessage, setCopyMessage] = useState(''); // State for custom copy message
+  const [copyMessage, setCopyMessage] = useState('');
+  const chatBodyRef = useRef(null); // Ref for chat scroll
 
-  // Removed: Sample data for the chart (chartData)
+  // Sample data for the chart (hypothetical, replace with real data if available)
+  const chartData = [
+    { name: 'Jan', Submitted: 400, Reviewed: 240, Selected: 200, Rejected: 50 },
+    { name: 'Feb', Submitted: 300, Reviewed: 139, Selected: 180, Rejected: 30 },
+    { name: 'Mar', Submitted: 200, Reviewed: 980, Selected: 250, Rejected: 20 },
+    { name: 'Apr', Submitted: 278, Reviewed: 390, Selected: 290, Rejected: 40 },
+    { name: 'May', Submitted: 189, Reviewed: 480, Selected: 190, Rejected: 10 },
+    { name: 'Jun', Submitted: 239, Reviewed: 380, Selected: 240, Rejected: 25 },
+    { name: 'Jul', Submitted: 349, Reviewed: 430, Selected: 300, Rejected: 35 },
+  ];
 
-  // Dynamic CSS Injection for Bootstrap and custom styles (remains unchanged)
+  // Dynamic CSS Injection for Bootstrap and custom styles
   useEffect(() => {
     const bootstrapLink = document.createElement('link');
     bootstrapLink.href = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css';
@@ -66,233 +77,594 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       style = document.createElement("style");
       style.id = id;
       style.innerHTML = `
-        body { background-color: #eef2f6; }
-        .status-container {
-          background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
-          min-height: 100vh;
-          padding: 30px 0;
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+        body {
+          background-color: #f0f2f5; /* Light gray background */
+          font-family: 'Poppins', sans-serif;
+          margin: 0;
+          padding: 0;
+          overflow-x: hidden;
         }
-        .status-card {
+
+        .status-container {
+          background: linear-gradient(135deg, #eef5ff 0%, #dceaff 100%);
+          min-height: 100vh;
+          padding: 40px 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+
+        .container-fluid {
+          max-width: 1200px; /* Wider container */
+          padding: 0 20px;
+        }
+
+        .dashboard-header {
+          text-align: center;
+          margin-bottom: 40px;
+          color: #333;
+        }
+
+        .dashboard-header h1 {
+          font-size: 2.8rem;
+          font-weight: 700;
+          color: #2c3e50;
+          position: relative;
+          display: inline-block;
+          margin-bottom: 10px;
+        }
+
+        .dashboard-header h1::after {
+          content: '';
+          position: absolute;
+          left: 50%;
+          bottom: -5px;
+          transform: translateX(-50%);
+          width: 80px;
+          height: 4px;
+          background: linear-gradient(90deg, #6366f1, #38bdf8);
+          border-radius: 2px;
+        }
+
+        .dashboard-header p {
+          font-size: 1.1rem;
+          color: #555;
+        }
+
+        .card {
           background-color: #ffffff;
           border-radius: 15px;
-          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); /* Softer, deeper shadow */
+          margin-bottom: 30px;
+          transition: all 0.3s ease-in-out;
+          border: none; /* Remove default bootstrap border */
           overflow: hidden;
-          margin-bottom: 25px;
+          animation: fadeIn 0.8s ease-out forwards; /* Fade in cards */
+          opacity: 0;
         }
-        .status-header {
+
+        .card:nth-child(1) { animation-delay: 0.1s; }
+        .card:nth-child(2) { animation-delay: 0.2s; }
+        .card:nth-child(3) { animation-delay: 0.3s; }
+        /* ... add more delays if needed for other cards */
+
+        .card-header {
           background: linear-gradient(90deg, #6366f1, #38bdf8);
           color: white;
-          padding: 20px;
-          text-align: center;
-          font-size: 1.5rem;
+          padding: 20px 25px;
+          font-size: 1.6rem;
           font-weight: 600;
+          border-top-left-radius: 15px;
+          border-top-right-radius: 15px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          position: relative;
+          z-index: 1;
         }
-        .status-icons {
+
+        .card-body {
+          padding: 25px;
+        }
+
+        .status-overview {
           display: flex;
           justify-content: space-around;
           padding: 20px 0;
-          background-color: #f8faff;
-          border-bottom: 1px solid #e0e7ff;
+          background-color: #fbfdff;
+          border-bottom: 1px solid #e9f0f8;
         }
-        .status-icon-item {
+
+        .status-item {
           text-align: center;
           color: #6c757d;
-          font-size: 0.9rem;
+          font-size: 0.95rem;
           font-weight: 500;
           position: relative;
+          padding: 0 10px;
+          flex: 1; /* Distribute space evenly */
         }
-        .status-icon-item .icon {
-          font-size: 2.2rem;
-          margin-bottom: 8px;
-          color: #ced4da;
+
+        .status-item .icon {
+          font-size: 2.8rem; /* Larger icons */
+          margin-bottom: 12px;
+          color: #dbe4ee; /* Lighter default icon color */
+          transition: color 0.4s ease-in-out, transform 0.3s ease;
         }
-        .status-icon-item.active .icon {
-          color: #6366f1;
+
+        .status-item.active .icon {
+          color: #6366f1; /* Active color */
+          transform: scale(1.1); /* Pop animation for active icon */
         }
-        .status-icon-item.active .status-label {
-          color: #6366f1;
-          font-weight: bold;
+
+        .status-item .label {
+          color: #8892a0;
+          transition: color 0.4s ease-in-out;
         }
-        .status-icon-item.active::after {
+
+        .status-item.active .label {
+          color: #333;
+          font-weight: 600;
+        }
+
+        /* Timeline / Progress Bar */
+        .timeline {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 30px;
+          margin-bottom: 40px;
+          position: relative;
+          padding: 0 20px;
+        }
+
+        .timeline::before {
           content: '';
           position: absolute;
-          bottom: -15px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 0;
-          height: 0;
-          border-left: 8px solid transparent;
-          border-right: 8px solid transparent;
-          border-bottom: 8px solid #6366f1;
+          top: 50%;
+          left: 0;
+          right: 0;
+          height: 4px;
+          background-color: #e0e7ff;
+          transform: translateY(-50%);
+          z-index: 0;
         }
-        .status-message-box {
-          background-color: #e6f7ff;
+
+        .timeline-progress {
+          position: absolute;
+          top: 50%;
+          left: 0;
+          height: 4px;
+          background: linear-gradient(90deg, #6366f1, #38bdf8);
+          transform: translateY(-50%);
+          z-index: 1;
+          width: 0; /* Animated width */
+          transition: width 1s ease-out;
+        }
+
+        .timeline-item {
+          text-align: center;
+          position: relative;
+          z-index: 2;
+          flex: 1;
+        }
+
+        .timeline-dot {
+          width: 20px;
+          height: 20px;
+          background-color: #e0e7ff;
+          border: 3px solid #e0e7ff;
+          border-radius: 50%;
+          margin: 0 auto 10px auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-size: 0.8rem;
+          transition: all 0.5s ease;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .timeline-item.completed .timeline-dot {
+          background-color: #4caf50;
+          border-color: #4caf50;
+          box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.3);
+        }
+        .timeline-item.active .timeline-dot {
+            background-color: #6366f1;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.4);
+            transform: scale(1.2);
+        }
+
+        .timeline-label {
+          font-size: 0.9rem;
+          color: #777;
+          font-weight: 500;
+        }
+
+        /* Alert Box */
+        .alert-modern {
+          padding: 20px 25px;
+          border-radius: 10px;
+          margin-bottom: 30px;
+          display: flex;
+          align-items: flex-start;
+          font-size: 1.05rem;
+          line-height: 1.6;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+          animation: fadeInSlideUp 0.6s ease-out forwards;
+        }
+        .alert-modern.info {
+          background-color: #e3f2fd;
           border-left: 5px solid #2196f3;
           color: #0d47a1;
-          padding: 15px;
-          border-radius: 8px;
-          margin-bottom: 20px;
-          font-size: 1.1rem;
         }
-        .status-message-box.success {
+        .alert-modern.success {
           background-color: #e8f5e9;
-          border-left-color: #4caf50;
+          border-left: 5px solid #4caf50;
           color: #1b5e20;
         }
-        .status-message-box.warning {
+        .alert-modern.warning {
           background-color: #fff3e0;
-          border-left-color: #ff9800;
+          border-left: 5px solid #ff9800;
           color: #e65100;
         }
-        .status-message-box.danger {
+        .alert-modern.danger {
           background-color: #ffebee;
-          border-left-color: #f44336;
+          border-left: 5px solid #f44336;
           color: #b71c1c;
         }
-        .details-card {
-          background-color: #f8faff;
-          border-radius: 10px;
-          padding: 20px;
-          box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
-          border: 1px solid #e0e7ff;
+        .alert-modern .icon {
+          font-size: 1.8rem;
+          margin-right: 15px;
+          align-self: center;
         }
-        .details-card ul {
-          list-style: none;
-          padding: 0;
-          margin: 0;
+        .alert-modern p {
+            margin-bottom: 0;
         }
-        .details-card ul li {
-          padding: 8px 0;
+
+        .detail-item {
+          padding: 12px 0;
           border-bottom: 1px dashed #e0e7ff;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
           color: #495057;
+          font-size: 0.95rem;
+          transition: background-color 0.2s ease;
         }
-        .details-card ul li:last-child {
+        .detail-item:last-child {
           border-bottom: none;
         }
-        .details-card ul li strong {
+        .detail-item strong {
           color: #343a40;
+          font-weight: 500;
+          flex-basis: 40%;
         }
+        .detail-item span {
+          text-align: right;
+          flex-basis: 58%;
+          color: #666;
+        }
+
+        .chart-container {
+          height: 350px; /* Fixed height for chart */
+          width: 100%;
+          margin-top: 20px;
+          background-color: #fbfdff;
+          border-radius: 10px;
+          padding: 15px;
+          box-shadow: inset 0 0 10px rgba(0,0,0,0.03);
+          animation: fadeIn 0.8s ease-out forwards;
+          opacity: 0;
+          animation-delay: 0.4s;
+        }
+        .chart-container .recharts-surface {
+            outline: none; /* Remove focus outline */
+        }
+
+        .btn-toggle-details, .btn-toggle-chart {
+          background: none;
+          border: none;
+          color: white;
+          font-size: 1rem;
+          cursor: pointer;
+          transition: transform 0.2s ease-in-out;
+        }
+        .btn-toggle-details:hover, .btn-toggle-chart:hover {
+            transform: scale(1.1);
+        }
+        .btn-toggle-details i, .btn-toggle-chart i {
+            margin-left: 8px;
+        }
+
+        .action-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .action-buttons .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .action-buttons .btn-primary {
+            background: linear-gradient(90deg, #6366f1, #38bdf8);
+            border: none;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
+        }
+        .action-buttons .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
+        }
+        .action-buttons .btn-outline-secondary {
+            border-color: #ced4da;
+            color: #6c757d;
+        }
+        .action-buttons .btn-outline-secondary:hover {
+            background-color: #f8f9fa;
+            color: #495057;
+        }
+
         .chat-widget {
           position: fixed;
-          bottom: 20px;
-          right: 20px;
-          width: 350px;
-          height: 450px;
+          bottom: 25px;
+          right: 25px;
+          width: 380px; /* Slightly wider */
+          height: 500px; /* Slightly taller */
           background-color: #fff;
-          border-radius: 15px;
-          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+          border-radius: 20px; /* More rounded */
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25); /* Deeper shadow */
           display: flex;
           flex-direction: column;
           overflow: hidden;
           z-index: 1000;
+          transform: scale(0.9); /* More pronounced initial scale */
+          opacity: 0;
+          animation: scaleInFadeIn 0.4s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Springy animation */
         }
-        .chat-header {
-          background: linear-gradient(90deg, #6366f1, #38bdf8);
-          color: white;
-          padding: 15px;
-          font-weight: 600;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-top-left-radius: 15px;
-          border-top-right-radius: 15px;
+        .chat-widget .chat-header {
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+            padding: 18px 25px;
+            font-size: 1.3rem;
         }
+        .chat-widget .chat-header button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            opacity: 0.8;
+            transition: opacity 0.2s ease;
+        }
+        .chat-widget .chat-header button:hover {
+            opacity: 1;
+        }
+
         .chat-body {
           flex-grow: 1;
-          padding: 15px;
+          padding: 20px;
           overflow-y: auto;
-          background-color: #f9f9f9;
+          background-color: #fcfdff; /* Lighter chat background */
+          border-bottom: 1px solid #f0f2f5;
           display: flex;
           flex-direction: column;
+          gap: 10px; /* Space between messages */
         }
+
         .chat-message {
-          max-width: 80%;
-          padding: 10px 15px;
-          border-radius: 15px;
-          margin-bottom: 10px;
+          max-width: 85%; /* Slightly wider messages */
+          padding: 12px 18px; /* More padding */
+          border-radius: 20px; /* More rounded */
           word-wrap: break-word;
+          font-size: 0.95rem;
+          line-height: 1.5;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05); /* Subtle message shadow */
+          animation: messagePop 0.3s forwards ease-out;
         }
         .chat-message.user {
           align-self: flex-end;
-          background-color: #e0e7ff;
+          background-color: #e0eaff; /* User message color */
           color: #333;
-          border-bottom-right-radius: 5px;
+          border-bottom-right-radius: 8px; /* Less rounded on one corner */
         }
         .chat-message.model {
           align-self: flex-start;
-          background-color: #f0f2f5;
+          background-color: #f5f8fb; /* Model message color */
           color: #333;
-          border-bottom-left-radius: 5px;
+          border-bottom-left-radius: 8px;
         }
+        .chat-message.loading {
+            font-style: italic;
+            color: #777;
+        }
+
         .chat-input-area {
-          padding: 10px 15px;
+          padding: 15px 20px;
           border-top: 1px solid #eee;
           display: flex;
           align-items: center;
+          background-color: #fff;
         }
         .chat-input-area input {
           flex-grow: 1;
-          border: 1px solid #ddd;
-          border-radius: 20px;
-          padding: 8px 15px;
+          border: 1px solid #e0e7ff;
+          border-radius: 25px; /* More rounded input */
+          padding: 10px 18px;
           margin-right: 10px;
+          font-size: 1rem;
+          transition: border-color 0.3s ease;
+        }
+        .chat-input-area input:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            outline: none;
         }
         .chat-input-area button {
-          border-radius: 20px;
+          border-radius: 25px;
+          padding: 10px 20px;
+          background: linear-gradient(90deg, #6366f1, #38bdf8);
+          border: none;
+          box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
+          transition: transform 0.2s ease;
         }
+        .chat-input-area button:hover {
+            transform: translateY(-1px);
+        }
+
         .chat-toggle-btn {
           position: fixed;
-          bottom: 20px;
-          right: 20px;
-          background: linear-gradient(90deg, #6366f1, #38bdf8);
+          bottom: 30px;
+          right: 30px;
+          background: linear-gradient(135deg, #6366f1, #38bdf8);
           color: white;
           border: none;
           border-radius: 50%;
-          width: 60px;
-          height: 60px;
-          font-size: 1.8rem;
+          width: 65px; /* Slightly larger */
+          height: 65px;
+          font-size: 2rem; /* Larger icon */
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
           z-index: 1001;
           cursor: pointer;
+          transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
         }
+        .chat-toggle-btn:hover {
+          transform: scale(1.1) rotate(5deg); /* More dynamic hover */
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
         .copy-message {
-          position: fixed;
-          bottom: 90px; /* Above the chat toggle button */
-          right: 20px;
-          background-color: rgba(0, 0, 0, 0.75);
-          color: white;
-          padding: 10px 15px;
-          border-radius: 8px;
+          bottom: 110px; /* Above the larger chat toggle button */
+          right: 30px;
+          background-color: rgba(0, 0, 0, 0.8);
+          padding: 12px 18px;
+          border-radius: 10px;
           font-size: 0.9rem;
-          z-index: 1002;
-          opacity: 0;
-          transition: opacity 0.3s ease-in-out;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
-        .copy-message.show {
-          opacity: 1;
+
+        /* Keyframe Animations */
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes fadeInSlideUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes scaleInFadeIn {
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes messagePop {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 992px) {
+            .dashboard-header h1 {
+                font-size: 2.2rem;
+            }
+            .status-overview {
+                flex-wrap: wrap;
+            }
+            .status-item {
+                flex-basis: 50%;
+                margin-bottom: 20px;
+            }
+            .timeline {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .timeline-item {
+                flex-basis: 50%;
+                margin-bottom: 20px;
+            }
+            .timeline::before, .timeline-progress {
+                display: none; /* Hide line for smaller screens */
+            }
+        }
+
         @media (max-width: 768px) {
-          .chat-widget {
-            width: 90%;
-            height: 70vh;
-            left: 5%;
-            right: 5%;
-            bottom: 10px;
-          }
-          .chat-toggle-btn {
-            width: 50px;
-            height: 50px;
-            font-size: 1.5rem;
-            bottom: 10px;
-            right: 10px;
-          }
-          .copy-message {
-            bottom: 70px; /* Adjust for smaller screens */
-            right: 10px;
-          }
+            .status-container {
+                padding: 20px 0;
+            }
+            .container-fluid {
+                padding: 0 15px;
+            }
+            .dashboard-header h1 {
+                font-size: 1.8rem;
+            }
+            .dashboard-header p {
+                font-size: 1rem;
+            }
+            .card-header {
+                font-size: 1.3rem;
+                padding: 15px 20px;
+            }
+            .card-body {
+                padding: 20px;
+            }
+            .status-item .icon {
+                font-size: 2.2rem;
+            }
+            .alert-modern {
+                font-size: 0.95rem;
+                padding: 15px 20px;
+            }
+            .alert-modern .icon {
+                font-size: 1.5rem;
+                margin-right: 10px;
+            }
+            .detail-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .detail-item strong, .detail-item span {
+                text-align: left;
+                width: 100%;
+                flex-basis: auto;
+            }
+            .action-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .chat-widget {
+                width: 95%;
+                height: 80vh;
+                bottom: 15px;
+                right: 2.5%;
+                left: 2.5%;
+                border-radius: 15px;
+            }
+            .chat-toggle-btn {
+                width: 55px;
+                height: 55px;
+                font-size: 1.6rem;
+                bottom: 15px;
+                right: 15px;
+            }
+            .copy-message {
+                bottom: 85px;
+                right: 15px;
+            }
+            .chat-input-area input {
+                padding: 8px 15px;
+            }
+            .chat-input-area button {
+                padding: 8px 15px;
+            }
         }
       `;
       document.head.appendChild(style);
@@ -306,6 +678,13 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       if (existingStyle && existingStyle.parentNode === head) head.removeChild(existingStyle);
     };
   }, []);
+
+  // Scroll to bottom of chat
+  useEffect(() => {
+    if (chatBodyRef.current) {
+      chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+    }
+  }, [chatHistory, showChat]); // Only scroll when chatHistory updates or chat is shown/hidden
 
   // Memoized function to fetch application details
   const fetchApplicationDetails = useCallback(async () => {
@@ -364,21 +743,34 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
 
     let initialChatPrompt = [];
     if (chatHistory.length === 0) {
-        let context = `You are a helpful assistant for VETA (Vocational Education and Training Authority) application status. 
-                        The user's full name is ${userDetails?.fullName || userDetails?.username || 'N/A'}. `;
+        let context = `You are a helpful and friendly assistant for VETA (Vocational Education and Training Authority) application status. 
+                        The user's full name is ${userDetails?.fullName || userDetails?.username || 'Applicant'}. `;
         if (applicationDetails) {
             context += `Their application ID is ${applicationDetails.id || 'N/A'}, 
                         current status is ${applicationDetails.applicationStatus || 'N/A'}. 
                         They preferred center ${applicationDetails.selectedCenter || 'N/A'}. 
                         If their application is SELECTED, their assigned center is ${applicationDetails.adminSelectedCenter || 'N/A'} 
-                        and assigned course ID is ${applicationDetails.adminSelectedCourseId || 'N/A'}.`;
+                        and assigned course ID is ${applicationDetails.adminSelectedCourseId || 'N/A'}.
+                        Their submitted date was ${applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}.
+                        Their last update was ${applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}.
+                        `;
         } else {
-            context += `They have not submitted an application yet.`;
+            context += `They have not submitted an application yet. If they ask about their application, inform them they need to apply first.`;
         }
-        context += ` Answer questions related to their application status, general VETA procedures, or guide them. Keep answers concise and professional.`;
+        
+        // Add chart data to context if user asks about trends or specific chart data
+        const chartDataString = JSON.stringify(chartData.map(d => ({
+            month: d.name,
+            submitted: d.Submitted,
+            reviewed: d.Reviewed,
+            selected: d.Selected,
+            rejected: d.Rejected
+        })));
+        context += `\n\nHere is a list of historical application data by month: ${chartDataString}. Use this data to answer questions about application trends, numbers, or performance. For example, if asked about "submitted applications in March", refer to this data.`;
+        context += `\n\nAnswer questions related to their application status, general VETA procedures, or analyze the provided application trend data. Keep answers concise, professional, and helpful. If you don't have enough information to answer a question, politely say so.`;
 
         initialChatPrompt.push({ role: "user", parts: [{ text: context }] });
-        initialChatPrompt.push({ role: "model", parts: [{ text: "Hello! How can I assist you with your VETA application status today?" }] });
+        initialChatPrompt.push({ role: "model", parts: [{ text: `Hello ${userDetails?.fullName || userDetails?.username || 'Applicant'}! I'm your VETA Application Assistant. How can I help you today? Feel free to ask about your application status or even about the application trends shown in the chart!` }] });
     }
 
     const newUserMessage = { role: "user", parts: [{ text: chatInput }] };
@@ -468,14 +860,17 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
   if (error) {
     return (
       <div className="status-container d-flex align-items-center justify-content-center">
-        <div className="alert alert-danger text-center">
-          <FaTimesCircle className="me-2" /> {error}
-          {error === 'You have not submitted an application form yet.' && (
-            <p className="mt-2">Please navigate to the Application Form to apply.</p>
-          )}
-          {error !== 'You have not submitted an application form yet.' && (
-            <p className="mt-2">Please ensure you are logged in correctly or contact support.</p>
-          )}
+        <div className="alert alert-danger text-center alert-modern danger">
+          <FaTimesCircle className="icon" /> 
+          <div>
+            <p className="mb-1"><strong>Error:</strong> {error}</p>
+            {error === 'You have not submitted an application form yet.' && (
+              <p className="mb-0">Please navigate to the Application Form section to apply and start your journey with VETA!</p>
+            )}
+            {error !== 'You have not submitted an application form yet.' && (
+              <p className="mb-0">A problem occurred while loading your status. Please ensure you are logged in correctly or contact our support for assistance.</p>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -484,130 +879,249 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
   const currentStatus = applicationDetails?.applicationStatus || 'NOT_SUBMITTED';
 
   const statusIcons = [
-    { label: 'Submitted', icon: 'fas fa-paper-plane', status: 'SUBMITTED' },
-    { label: 'Under Review', icon: 'fas fa-search', status: 'UNDER_REVIEW' },
-    { label: 'Selected', icon: 'fas fa-check-circle', status: 'SELECTED' },
-    { label: 'Rejected', icon: 'fas fa-times-circle', status: 'REJECTED' },
+    { label: 'Submitted', icon: 'fas fa-file-alt', status: 'SUBMITTED', tooltip: 'Your application has been received.' },
+    { label: 'Under Review', icon: 'fas fa-hourglass-half', status: 'UNDER_REVIEW', tooltip: 'Our team is currently evaluating your application.' },
+    { label: 'Selected', icon: 'fas fa-graduation-cap', status: 'SELECTED', tooltip: 'Congratulations! You have been selected.' },
+    { label: 'Rejected', icon: 'fas fa-exclamation-circle', status: 'REJECTED', tooltip: 'Your application was not successful at this time.' },
   ];
+
+  // Map application status to timeline steps
+  const timelineSteps = [
+    { id: 1, label: 'Application Submitted', status: 'SUBMITTED' },
+    { id: 2, label: 'Documents Verified', status: 'DOCS_VERIFIED' }, // Hypothetical step
+    { id: 3, label: 'Interview Scheduled', status: 'INTERVIEW_SCHEDULED' }, // Hypothetical step
+    { id: 4, label: 'Final Review', status: 'UNDER_REVIEW' }, // Maps to 'UNDER_REVIEW'
+    { id: 5, label: 'Decision Made', status: ['SELECTED', 'REJECTED'] }, // Final decision
+  ];
+
+  const currentTimelineIndex = timelineSteps.findIndex(step => {
+    if (Array.isArray(step.status)) {
+      return step.status.includes(currentStatus);
+    }
+    return step.status === currentStatus;
+  });
+
+  const getTimelineProgressWidth = () => {
+    if (currentTimelineIndex === -1) return '0%';
+    const progress = (currentTimelineIndex / (timelineSteps.length - 1)) * 100;
+    return `${progress}%`;
+  };
+
+
+  const getAlertMessage = () => {
+    switch (currentStatus) {
+      case 'SELECTED':
+        return {
+          type: 'success',
+          icon: <FaCheckCircle className="icon" />,
+          title: 'Congratulations!',
+          message: `Your dedication has paid off! Welcome to a new chapter of learning and growth at VETA ${applicationDetails?.adminSelectedCenter || 'your assigned center'}. Please check your email for further instructions regarding enrollment and orientation.`,
+          action: { label: 'View Enrollment Guide', icon: <FaInfoCircle />, link: '#' } // Placeholder
+        };
+      case 'SUBMITTED':
+        return {
+          type: 'info',
+          icon: <FaInfoCircle className="icon" />,
+          title: 'Application Received!',
+          message: 'Your application has been successfully submitted and is now awaiting initial review. We will notify you once your documents have been verified.',
+          action: { label: 'Upload Missing Documents', icon: <FaUpload />, link: '#' } // Placeholder
+        };
+      case 'UNDER_REVIEW':
+        return {
+          type: 'warning',
+          icon: <FaInfoCircle className="icon" />,
+          title: 'Under Review',
+          message: 'Your application is currently being thoroughly reviewed by our admissions committee. We appreciate your patience as we carefully assess all submissions.',
+          action: { label: 'Check Interview Status', icon: <FaCalendarAlt />, link: '#' } // Placeholder
+        };
+      case 'REJECTED':
+        return {
+          type: 'danger',
+          icon: <FaTimesCircle className="icon" />,
+          title: 'Application Unsuccessful',
+          message: 'We regret to inform you that your application was not successful at this time. Please contact our admissions office for feedback or consider reapplying next cycle.',
+          action: { label: 'Contact Admissions', icon: <FaBell />, link: '#' } // Placeholder
+        };
+      default:
+        return {
+          type: 'info',
+          icon: <FaInfoCircle className="icon" />,
+          title: 'No Application Found',
+          message: 'It appears you have not submitted an application yet. Please proceed to the Application Form section to begin your application process.',
+        };
+    }
+  };
+
+  const alertContent = getAlertMessage();
 
   return (
     <div className="status-container">
-      <div className="container">
-        {/* Header and Status Icons */}
-        <div className="status-card">
-          <div className="status-header">Application Status</div>
-          <div className="status-icons">
-            {statusIcons.map((item) => (
-              <div key={item.status} className={`status-icon-item ${currentStatus === item.status ? 'active' : ''}`}>
-                <i className={item.icon + ' icon'}></i>
-                <div className="status-label">{item.label}</div>
+      <div className="container-fluid">
+        <header className="dashboard-header">
+          <h1>Welcome, {userDetails?.fullName || userDetails?.username || 'Applicant'}!</h1>
+          <p>Your journey with VETA starts here. Track your application status and explore trends.</p>
+        </header>
+
+        {/* Alert/Notification Card */}
+        <div className={`card alert-modern ${alertContent.type}`}>
+          {alertContent.icon}
+          <div>
+            <p className="mb-2"><strong>{alertContent.title}</strong></p>
+            <p className="mb-0">{alertContent.message}</p>
+            {alertContent.action && (
+              <div className="mt-3">
+                <button className="btn btn-sm btn-outline-secondary">
+                  {alertContent.action.icon} {alertContent.action.label}
+                </button>
               </div>
-            ))}
+            )}
           </div>
         </div>
 
-        {/* Conditional Messages */}
-        {currentStatus === 'SELECTED' && (
-          <div className="status-message-box success mb-4">
-            <FaCheckCircle className="me-2" /> Your dedication has paid off! Welcome to a new chapter of learning and growth!
-            <p className="mb-0 mt-2">
-              You have been selected to join VETA {applicationDetails?.adminSelectedCenter || 'N/A'}.
-              Please check your email for further instructions.
-            </p>
+        {/* Application Status & Timeline */}
+        <div className="card">
+          <div className="card-header">
+            Application Progress
           </div>
-        )}
-        {currentStatus === 'SUBMITTED' && (
-          <div className="status-message-box info mb-4">
-            <FaInfoCircle className="me-2" /> Your application has been submitted and is awaiting review.
-            <p className="mb-0 mt-2">We will notify you of any updates via email and on this page.</p>
+          <div className="card-body">
+            <div className="status-overview">
+              {statusIcons.map((item, index) => (
+                <div key={item.status} className={`status-item ${currentStatus === item.status ? 'active' : ''}`}>
+                  <i className={item.icon + ' icon'} title={item.tooltip}></i>
+                  <div className="label">{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <h6 className="text-center mt-4 mb-3 text-muted">Your Application Journey</h6>
+            <div className="timeline">
+              <div className="timeline-progress" style={{ width: getTimelineProgressWidth() }}></div>
+              {timelineSteps.map((step, index) => (
+                <div 
+                  key={step.id} 
+                  className={`timeline-item 
+                    ${index <= currentTimelineIndex ? 'completed' : ''}
+                    ${index === currentTimelineIndex ? 'active' : ''}
+                  `}
+                >
+                  <div className="timeline-dot">
+                    {index < currentTimelineIndex && <FaCheckCircle />}
+                    {index === currentTimelineIndex && <FaRegSmileBeam />}
+                  </div>
+                  <div className="timeline-label">{step.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
-        {currentStatus === 'UNDER_REVIEW' && (
-          <div className="status-message-box warning mb-4">
-            <FaInfoCircle className="me-2" /> Your application is currently under review.
-            <p className="mb-0 mt-2">Please check back later for updates.</p>
-          </div>
-        )}
-        {currentStatus === 'REJECTED' && (
-          <div className="status-message-box danger mb-4">
-            <FaTimesCircle className="me-2" /> We regret to inform you that your application was not successful at this time.
-            <p className="mb-0 mt-2">Please contact support for more information or consider reapplying next cycle.</p>
-          </div>
-        )}
+        </div>
 
         {/* Application Details Section */}
         {applicationDetails && (
-          <div className="status-card p-4">
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <h5 className="mb-0">Application Details</h5>
-              <button className="btn btn-sm btn-outline-primary" onClick={() => setShowDetails(!showDetails)}>
-                {showDetails ? 'Hide Details' : 'Show Details'}
+          <div className="card">
+            <div className="card-header">
+              Detailed Information
+              <button className="btn-toggle-details" onClick={() => setShowDetails(!showDetails)}>
+                {showDetails ? 'Hide' : 'Show'} Details <i className={`fas fa-chevron-${showDetails ? 'up' : 'down'}`}></i>
               </button>
             </div>
             {showDetails && (
-              <div className="details-card">
-                <ul>
-                  <li><strong>Application ID:</strong> {applicationDetails.id || 'N/A'}</li>
-                  <li><strong>Full Name:</strong> {applicationDetails.fullName || 'N/A'}</li>
-                  <li><strong>Date of Birth:</strong> {applicationDetails.dateOfBirth ? new Date(applicationDetails.dateOfBirth).toLocaleDateString() : 'N/A'}</li>
-                  <li><strong>Gender:</strong> {applicationDetails.gender || 'N/A'}</li>
-                  <li><strong>Nationality:</strong> {applicationDetails.nationality || 'N/A'}</li>
-                  <li><strong>ID Type:</strong> {applicationDetails.idType || 'N/A'}</li>
-                  <li><strong>ID Number:</strong> {applicationDetails.idNumber || 'N/A'}</li>
-                  <li><strong>Contact Phone:</strong> {applicationDetails.contactPhone || 'N/A'}</li>
-                  <li><strong>Contact Email:</strong> {applicationDetails.contactEmail || 'N/A'}</li>
-                  <li><strong>Education Level:</strong> {applicationDetails.educationLevel || 'N/A'}</li>
-                  <li><strong>Previous School:</strong> {applicationDetails.previousSchool || 'N/A'}</li>
-                  <li><strong>Preferred VETA Center:</strong> {applicationDetails.selectedCenter || 'N/A'}</li>
+              <div className="card-body">
+                <ul className="list-unstyled">
+                  <li className="detail-item"><strong>Application ID:</strong> <span>{applicationDetails.id || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Full Name:</strong> <span>{applicationDetails.fullName || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Date of Birth:</strong> <span>{applicationDetails.dateOfBirth ? new Date(applicationDetails.dateOfBirth).toLocaleDateString() : 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Gender:</strong> <span>{applicationDetails.gender || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Nationality:</strong> <span>{applicationDetails.nationality || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>ID Type:</strong> <span>{applicationDetails.idType || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>ID Number:</strong> <span>{applicationDetails.idNumber || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Contact Phone:</strong> <span>{applicationDetails.contactPhone || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Contact Email:</strong> <span>{applicationDetails.contactEmail || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Education Level:</strong> <span>{applicationDetails.educationLevel || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Previous School:</strong> <span>{applicationDetails.previousSchool || 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Preferred VETA Center:</strong> <span>{applicationDetails.selectedCenter || 'N/A'}</span></li>
                   {applicationDetails.preferredCourses && applicationDetails.preferredCourses.length > 0 && (
-                    <li><strong>Preferred Courses:</strong> {applicationDetails.preferredCourses.map(courseId => {
+                    <li className="detail-item"><strong>Preferred Courses:</strong> <span>{applicationDetails.preferredCourses.map(courseId => {
                         const course = (
                             [
-                                { id: 1, name: 'Welding and Fabrication' },
-                                { id: 2, name: 'Electrical Installation' },
-                                { id: 3, name: 'Carpentry and Joinery' },
-                                { id: 4, name: 'Plumbing' },
-                                { id: 5, name: 'Tailoring and Dressmaking' },
-                                { id: 6, name: 'Automotive Mechanics' },
-                                { id: 7, name: 'ICT' },
-                                { id: 8, name: 'Hotel Management' },
+                                { id: 1, name: 'Welding and Fabrication' }, { id: 2, name: 'Electrical Installation' },
+                                { id: 3, name: 'Carpentry and Joinery' }, { id: 4, name: 'Plumbing' },
+                                { id: 5, name: 'Tailoring and Dressmaking' }, { id: 6, name: 'Automotive Mechanics' },
+                                { id: 7, name: 'ICT' }, { id: 8, name: 'Hotel Management' },
                             ]
                         ).find(c => c.id === courseId);
                         return course ? course.name : `Course ${courseId}`;
-                    }).join(', ')}</li>
+                    }).join(', ')}</span></li>
                   )}
                   {applicationDetails.adminSelectedCenter && (
-                    <li><strong>Selected Center (Admin):</strong> {applicationDetails.adminSelectedCenter}</li>
+                    <li className="detail-item"><strong>Assigned Center:</strong> <span>{applicationDetails.adminSelectedCenter}</span></li>
                   )}
                   {applicationDetails.adminSelectedCourseId && (
-                    <li><strong>Selected Course (Admin):</strong> {
+                    <li className="detail-item"><strong>Assigned Course:</strong> <span>{
                         (
                             [
-                                { id: 1, name: 'Welding and Fabrication' },
-                                { id: 2, name: 'Electrical Installation' },
-                                { id: 3, name: 'Carpentry and Joinery' },
-                                { id: 4, name: 'Plumbing' },
-                                { id: 5, name: 'Tailoring and Dressmaking' },
-                                { id: 6, name: 'Automotive Mechanics' },
-                                { id: 7, name: 'ICT' },
-                                { id: 8, name: 'Hotel Management' },
+                                { id: 1, name: 'Welding and Fabrication' }, { id: 2, name: 'Electrical Installation' },
+                                { id: 3, name: 'Carpentry and Joinery' }, { id: 4, name: 'Plumbing' },
+                                { id: 5, name: 'Tailoring and Dressmaking' }, { id: 6, name: 'Automotive Mechanics' },
+                                { id: 7, name: 'ICT' }, { id: 8, name: 'Hotel Management' },
                             ]
                         ).find(c => c.id === applicationDetails.adminSelectedCourseId)?.name || `Course ${applicationDetails.adminSelectedCourseId}`
-                    }</li>
+                    }</span></li>
                   )}
-                  <li><strong>Submitted on:</strong> {applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}</li>
-                  <li><strong>Last Updated:</strong> {applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}</li>
-                  <li><strong>Status Code:</strong> {applicationDetails.applicationStatus || 'N/A'}</li>
+                  <li className="detail-item"><strong>Submitted on:</strong> <span>{applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Last Updated:</strong> <span>{applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}</span></li>
+                  <li className="detail-item"><strong>Current Status Code:</strong> <span>{applicationDetails.applicationStatus || 'N/A'}</span></li>
                 </ul>
-                <div className="text-end mt-3">
-                  <button className="btn btn-outline-secondary btn-sm" onClick={handleCopyDetails}>
-                    <FaClipboard className="me-1" /> Copy Details
+                <div className="action-buttons">
+                  <button className="btn btn-outline-secondary" onClick={handleCopyDetails}>
+                    <FaClipboard className="me-1" /> Copy All Details
                   </button>
+                  {/* Add more context-specific actions here, e.g., if status is REJECTED, "Appeal Decision" */}
                 </div>
               </div>
             )}
           </div>
         )}
+
+        {/* Application Trends Chart Section */}
+        <div className="card">
+          <div className="card-header">
+            Application Trends Overview <FaChartLine className="ms-2" />
+            <button className="btn-toggle-chart" onClick={() => setShowChart(!showChart)}>
+              {showChart ? 'Hide' : 'Show'} Chart <i className={`fas fa-chevron-${showChart ? 'up' : 'down'}`}></i>
+            </button>
+          </div>
+          {showChart && (
+            <div className="card-body">
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e9f0f8" />
+                    <XAxis dataKey="name" stroke="#666" padding={{ left: 30, right: 30 }} />
+                    <YAxis stroke="#666" />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#fff', border: '1px solid #e0e7ff', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}
+                      labelStyle={{ color: '#333', fontWeight: 'bold' }}
+                      itemStyle={{ color: '#555' }}
+                      formatter={(value) => new Intl.NumberFormat('en').format(value)}
+                      cursor={{ stroke: '#99aaff', strokeWidth: 1 }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '15px' }} />
+                    <Line type="monotone" dataKey="Submitted" stroke="#8884d8" activeDot={{ r: 6 }} strokeWidth={2} name="Total Submitted" />
+                    <Line type="monotone" dataKey="Reviewed" stroke="#82ca9d" activeDot={{ r: 6 }} strokeWidth={2} name="Under Review" />
+                    <Line type="monotone" dataKey="Selected" stroke="#28a745" activeDot={{ r: 6 }} strokeWidth={2} name="Selected" />
+                    <Line type="monotone" dataKey="Rejected" stroke="#dc3545" activeDot={{ r: 6 }} strokeWidth={2} name="Rejected" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-muted text-center mt-3">
+                <small><FaInfoCircle className="me-1" /> This chart shows the hypothetical volume of applications at different stages over recent months. This data is for illustrative purposes.</small>
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Custom copy message display */}
         {copyMessage && (
@@ -615,9 +1129,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
             {copyMessage}
           </div>
         )}
-
-        {/* Removed Chart Section */}
-        {/* This is where the chart section was previously located */}
 
         {/* Support Chat Toggle Button */}
         {!showChat && (
@@ -630,19 +1141,22 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
         {showChat && (
           <div className="chat-widget">
             <div className="chat-header">
-              Support Chat
-              <button className="btn btn-sm btn-link text-white" onClick={() => setShowChat(false)}>
-                <i className="fas fa-times"></i>
+              VETA AI Assistant
+              <button className="btn-close-chat" onClick={() => setShowChat(false)}>
+                <FaTimes />
               </button>
             </div>
-            <div className="chat-body">
+            <div className="chat-body" ref={chatBodyRef}>
               {chatHistory.map((msg, index) => (
-                <div key={index} className={`chat-message ${msg.role}`}>
-                  {msg.parts[0].text}
-                </div>
+                // Only render user/model messages, not initial prompt
+                msg.role !== 'user' || index === chatHistory.length -1 || chatHistory[index-1]?.role === 'model' ? ( 
+                    <div key={index} className={`chat-message ${msg.role} ${isChatLoading && index === chatHistory.length - 1 ? 'loading' : ''}`}>
+                        {msg.parts[0].text}
+                    </div>
+                ) : null
               ))}
               {isChatLoading && (
-                <div className="chat-message model">
+                <div className="chat-message model loading">
                   <FaSpinner className="fa-spin me-2" /> Typing...
                 </div>
               )}
@@ -650,14 +1164,14 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
             <div className="chat-input-area">
               <input
                 type="text"
-                placeholder="Type your message..."
+                placeholder="Ask me anything..."
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyPress={(e) => { if (e.key === 'Enter') sendMessage(); }}
                 disabled={isChatLoading}
               />
               <button className="btn btn-primary" onClick={sendMessage} disabled={isChatLoading}>
-                Send
+                <i className="fas fa-paper-plane"></i>
               </button>
             </div>
           </div>
