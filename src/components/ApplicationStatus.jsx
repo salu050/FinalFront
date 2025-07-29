@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from '../api/axiosConfig.jsx'; // Import the configured axios instance
-import { FaCheckCircle, FaTimesCircle, FaRegSmileBeam, FaSpinner, FaInfoCircle, FaClipboard, FaChartLine, FaBell, FaUpload, FaCalendarAlt, FaTimes } from 'react-icons/fa'; // Added more icons
+import { FaCheckCircle, FaTimesCircle, FaRegSmileBeam, FaSpinner, FaInfoCircle, FaClipboard, FaChartLine, FaBell, FaUpload, FaCalendarAlt, FaTimes, FaDownload } from 'react-icons/fa'; // Added FaDownload icon
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'; // Recharts imports
 
 // For LLM integration
@@ -78,7 +78,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       style.id = id;
       style.innerHTML = `
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-
         body {
           background-color: #f0f2f5; /* Light gray background */
           font-family: 'Poppins', sans-serif;
@@ -86,7 +85,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           padding: 0;
           overflow-x: hidden;
         }
-
         .status-container {
           background: linear-gradient(135deg, #eef5ff 0%, #dceaff 100%);
           min-height: 100vh;
@@ -95,18 +93,15 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           flex-direction: column;
           align-items: center;
         }
-
         .container-fluid {
           max-width: 1200px; /* Wider container */
           padding: 0 20px;
         }
-
         .dashboard-header {
           text-align: center;
           margin-bottom: 40px;
           color: #333;
         }
-
         .dashboard-header h1 {
           font-size: 2.8rem;
           font-weight: 700;
@@ -115,7 +110,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           display: inline-block;
           margin-bottom: 10px;
         }
-
         .dashboard-header h1::after {
           content: '';
           position: absolute;
@@ -127,12 +121,10 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           background: linear-gradient(90deg, #6366f1, #38bdf8);
           border-radius: 2px;
         }
-
         .dashboard-header p {
           font-size: 1.1rem;
           color: #555;
         }
-
         .card {
           background-color: #ffffff;
           border-radius: 15px;
@@ -144,12 +136,10 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           animation: fadeIn 0.8s ease-out forwards; /* Fade in cards */
           opacity: 0;
         }
-
         .card:nth-child(1) { animation-delay: 0.1s; }
         .card:nth-child(2) { animation-delay: 0.2s; }
         .card:nth-child(3) { animation-delay: 0.3s; }
         /* ... add more delays if needed for other cards */
-
         .card-header {
           background: linear-gradient(90deg, #6366f1, #38bdf8);
           color: white;
@@ -164,11 +154,9 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           position: relative;
           z-index: 1;
         }
-
         .card-body {
           padding: 25px;
         }
-
         .status-overview {
           display: flex;
           justify-content: space-around;
@@ -176,7 +164,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           background-color: #fbfdff;
           border-bottom: 1px solid #e9f0f8;
         }
-
         .status-item {
           text-align: center;
           color: #6c757d;
@@ -186,29 +173,24 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           padding: 0 10px;
           flex: 1; /* Distribute space evenly */
         }
-
         .status-item .icon {
           font-size: 2.8rem; /* Larger icons */
           margin-bottom: 12px;
           color: #dbe4ee; /* Lighter default icon color */
           transition: color 0.4s ease-in-out, transform 0.3s ease;
         }
-
         .status-item.active .icon {
           color: #6366f1; /* Active color */
           transform: scale(1.1); /* Pop animation for active icon */
         }
-
         .status-item .label {
           color: #8892a0;
           transition: color 0.4s ease-in-out;
         }
-
         .status-item.active .label {
           color: #333;
           font-weight: 600;
         }
-
         /* Timeline / Progress Bar */
         .timeline {
           display: flex;
@@ -219,7 +201,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           position: relative;
           padding: 0 20px;
         }
-
         .timeline::before {
           content: '';
           position: absolute;
@@ -231,7 +212,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           transform: translateY(-50%);
           z-index: 0;
         }
-
         .timeline-progress {
           position: absolute;
           top: 50%;
@@ -243,14 +223,12 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           width: 0; /* Animated width */
           transition: width 1s ease-out;
         }
-
         .timeline-item {
           text-align: center;
           position: relative;
           z-index: 2;
           flex: 1;
         }
-
         .timeline-dot {
           width: 20px;
           height: 20px;
@@ -266,25 +244,22 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           transition: all 0.5s ease;
           box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
-
         .timeline-item.completed .timeline-dot {
           background-color: #4caf50;
           border-color: #4caf50;
           box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.3);
         }
         .timeline-item.active .timeline-dot {
-            background-color: #6366f1;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.4);
-            transform: scale(1.2);
+          background-color: #6366f1;
+          border-color: #6366f1;
+          box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.4);
+          transform: scale(1.2);
         }
-
         .timeline-label {
           font-size: 0.9rem;
           color: #777;
           font-weight: 500;
         }
-
         /* Alert Box */
         .alert-modern {
           padding: 20px 25px;
@@ -323,9 +298,8 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           align-self: center;
         }
         .alert-modern p {
-            margin-bottom: 0;
+          margin-bottom: 0;
         }
-
         .detail-item {
           padding: 12px 0;
           border-bottom: 1px dashed #e0e7ff;
@@ -349,7 +323,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           flex-basis: 58%;
           color: #666;
         }
-
         .chart-container {
           height: 350px; /* Fixed height for chart */
           width: 100%;
@@ -363,9 +336,8 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           animation-delay: 0.4s;
         }
         .chart-container .recharts-surface {
-            outline: none; /* Remove focus outline */
+          outline: none; /* Remove focus outline */
         }
-
         .btn-toggle-details, .btn-toggle-chart {
           background: none;
           border: none;
@@ -375,44 +347,42 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           transition: transform 0.2s ease-in-out;
         }
         .btn-toggle-details:hover, .btn-toggle-chart:hover {
-            transform: scale(1.1);
+          transform: scale(1.1);
         }
         .btn-toggle-details i, .btn-toggle-chart i {
-            margin-left: 8px;
+          margin-left: 8px;
         }
-
         .action-buttons {
-            display: flex;
-            justify-content: flex-end;
-            gap: 15px;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
+          display: flex;
+          justify-content: flex-end;
+          gap: 15px;
+          margin-top: 20px;
+          padding-top: 20px;
+          border-top: 1px solid #eee;
         }
         .action-buttons .btn {
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.3s ease;
+          padding: 10px 20px;
+          border-radius: 8px;
+          font-weight: 500;
+          transition: all 0.3s ease;
         }
         .action-buttons .btn-primary {
-            background: linear-gradient(90deg, #6366f1, #38bdf8);
-            border: none;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
+          background: linear-gradient(90deg, #6366f1, #38bdf8);
+          border: none;
+          box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
         }
         .action-buttons .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
         }
         .action-buttons .btn-outline-secondary {
-            border-color: #ced4da;
-            color: #6c757d;
+          border-color: #ced4da;
+          color: #6c757d;
         }
         .action-buttons .btn-outline-secondary:hover {
-            background-color: #f8f9fa;
-            color: #495057;
+          background-color: #f8f9fa;
+          color: #495057;
         }
-
         .chat-widget {
           position: fixed;
           bottom: 25px;
@@ -431,23 +401,22 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           animation: scaleInFadeIn 0.4s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Springy animation */
         }
         .chat-widget .chat-header {
-            border-bottom-left-radius: 0;
-            border-bottom-right-radius: 0;
-            padding: 18px 25px;
-            font-size: 1.3rem;
+          border-bottom-left-radius: 0;
+          border-bottom-right-radius: 0;
+          padding: 18px 25px;
+          font-size: 1.3rem;
         }
         .chat-widget .chat-header button {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.2rem;
-            opacity: 0.8;
-            transition: opacity 0.2s ease;
+          background: none;
+          border: none;
+          color: white;
+          font-size: 1.2rem;
+          opacity: 0.8;
+          transition: opacity 0.2s ease;
         }
         .chat-widget .chat-header button:hover {
-            opacity: 1;
+          opacity: 1;
         }
-
         .chat-body {
           flex-grow: 1;
           padding: 20px;
@@ -458,7 +427,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           flex-direction: column;
           gap: 10px; /* Space between messages */
         }
-
         .chat-message {
           max-width: 85%; /* Slightly wider messages */
           padding: 12px 18px; /* More padding */
@@ -482,10 +450,9 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           border-bottom-left-radius: 8px;
         }
         .chat-message.loading {
-            font-style: italic;
-            color: #777;
+          font-style: italic;
+          color: #777;
         }
-
         .chat-input-area {
           padding: 15px 20px;
           border-top: 1px solid #eee;
@@ -503,9 +470,9 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           transition: border-color 0.3s ease;
         }
         .chat-input-area input:focus {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-            outline: none;
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+          outline: none;
         }
         .chat-input-area button {
           border-radius: 25px;
@@ -516,9 +483,8 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           transition: transform 0.2s ease;
         }
         .chat-input-area button:hover {
-            transform: translateY(-1px);
+          transform: translateY(-1px);
         }
-
         .chat-toggle-btn {
           position: fixed;
           bottom: 30px;
@@ -542,7 +508,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           transform: scale(1.1) rotate(5deg); /* More dynamic hover */
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
-
         .copy-message {
           bottom: 110px; /* Above the larger chat toggle button */
           right: 30px;
@@ -552,7 +517,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           font-size: 0.9rem;
           box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
-
         /* Keyframe Animations */
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(20px); }
@@ -570,101 +534,99 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
         }
-
         /* Responsive adjustments */
         @media (max-width: 992px) {
-            .dashboard-header h1 {
-                font-size: 2.2rem;
-            }
-            .status-overview {
-                flex-wrap: wrap;
-            }
-            .status-item {
-                flex-basis: 50%;
-                margin-bottom: 20px;
-            }
-            .timeline {
-                flex-wrap: wrap;
-                justify-content: center;
-            }
-            .timeline-item {
-                flex-basis: 50%;
-                margin-bottom: 20px;
-            }
-            .timeline::before, .timeline-progress {
-                display: none; /* Hide line for smaller screens */
-            }
+          .dashboard-header h1 {
+            font-size: 2.2rem;
+          }
+          .status-overview {
+            flex-wrap: wrap;
+          }
+          .status-item {
+            flex-basis: 50%;
+            margin-bottom: 20px;
+          }
+          .timeline {
+            flex-wrap: wrap;
+            justify-content: center;
+          }
+          .timeline-item {
+            flex-basis: 50%;
+            margin-bottom: 20px;
+          }
+          .timeline::before, .timeline-progress {
+            display: none; /* Hide line for smaller screens */
+          }
         }
-
         @media (max-width: 768px) {
-            .status-container {
-                padding: 20px 0;
-            }
-            .container-fluid {
-                padding: 0 15px;
-            }
-            .dashboard-header h1 {
-                font-size: 1.8rem;
-            }
-            .dashboard-header p {
-                font-size: 1rem;
-            }
-            .card-header {
-                font-size: 1.3rem;
-                padding: 15px 20px;
-            }
-            .card-body {
-                padding: 20px;
-            }
-            .status-item .icon {
-                font-size: 2.2rem;
-            }
-            .alert-modern {
-                font-size: 0.95rem;
-                padding: 15px 20px;
-            }
-            .alert-modern .icon {
-                font-size: 1.5rem;
-                margin-right: 10px;
-            }
-            .detail-item {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .detail-item strong, .detail-item span {
-                text-align: left;
-                width: 100%;
-                flex-basis: auto;
-            }
-            .action-buttons {
-                flex-direction: column;
-                gap: 10px;
-            }
-            .chat-widget {
-                width: 95%;
-                height: 80vh;
-                bottom: 15px;
-                right: 2.5%;
-                left: 2.5%;
-                border-radius: 15px;
-            }
-            .chat-toggle-btn {
-                width: 55px;
-                height: 55px;
-                font-size: 1.6rem;
-                bottom: 15px;
-                right: 15px;
-            }
-            .copy-message {
-                bottom: 85px;
-                right: 15px;
-            }
-            .chat-input-area input {
-                padding: 8px 15px;
-            }
-            .chat-input-area button {
-                padding: 8px 15px;
-            }
+          .status-container {
+            padding: 20px 0;
+          }
+          .container-fluid {
+            padding: 0 15px;
+          }
+          .dashboard-header h1 {
+            font-size: 1.8rem;
+          }
+          .dashboard-header p {
+            font-size: 1rem;
+          }
+          .card-header {
+            font-size: 1.3rem;
+            padding: 15px 20px;
+          }
+          .card-body {
+            padding: 20px;
+          }
+          .status-item .icon {
+            font-size: 2.2rem;
+          }
+          .alert-modern {
+            font-size: 0.95rem;
+            padding: 15px 20px;
+          }
+          .alert-modern .icon {
+            font-size: 1.5rem;
+            margin-right: 10px;
+          }
+          .detail-item {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .detail-item strong, .detail-item span {
+            text-align: left;
+            width: 100%;
+            flex-basis: auto;
+          }
+          .action-buttons {
+            flex-direction: column;
+            gap: 10px;
+          }
+          .chat-widget {
+            width: 95%;
+            height: 80vh;
+            bottom: 15px;
+            right: 2.5%;
+            left: 2.5%;
+            border-radius: 15px;
+          }
+          .chat-toggle-btn {
+            width: 55px;
+            height: 55px;
+            font-size: 1.6rem;
+            bottom: 15px;
+            right: 15px;
+          }
+          .copy-message {
+            bottom: 85px;
+            right: 15px;
+          }
+          .chat-input-area input {
+            padding: 8px 15px;
+          }
+          .chat-input-area button {
+            padding: 8px 15px;
+          }
         }
       `;
       document.head.appendChild(style);
@@ -698,7 +660,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       setIsLoading(true);
     }
     setError('');
-
     try {
       const response = await axios.get(`/applications/user/${userDetails.id}`);
       const data = response.data;
@@ -711,9 +672,8 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       });
 
       if (onSubmitDetails && typeof onSubmitDetails === 'function' && JSON.stringify(userDetails.applicationDetails) !== JSON.stringify(data)) {
-         onSubmitDetails({ ...userDetails, applicationDetails: data });
+        onSubmitDetails({ ...userDetails, applicationDetails: data });
       }
-
     } catch (err) {
       console.error("Error fetching application details:", err);
       if (err.response && err.response.status === 404) {
@@ -730,12 +690,9 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
   // Effect to fetch initial data and set up polling
   useEffect(() => {
     fetchApplicationDetails();
-
     const intervalId = setInterval(fetchApplicationDetails, 10000);
-
     return () => clearInterval(intervalId);
   }, [fetchApplicationDetails]);
-
 
   // Function to send message to LLM
   const sendMessage = async () => {
@@ -743,34 +700,37 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
 
     let initialChatPrompt = [];
     if (chatHistory.length === 0) {
-        let context = `You are a helpful and friendly assistant for VETA (Vocational Education and Training Authority) application status. 
-                        The user's full name is ${userDetails?.fullName || userDetails?.username || 'Applicant'}. `;
-        if (applicationDetails) {
-            context += `Their application ID is ${applicationDetails.id || 'N/A'}, 
-                        current status is ${applicationDetails.applicationStatus || 'N/A'}. 
-                        They preferred center ${applicationDetails.selectedCenter || 'N/A'}. 
-                        If their application is SELECTED, their assigned center is ${applicationDetails.adminSelectedCenter || 'N/A'} 
-                        and assigned course ID is ${applicationDetails.adminSelectedCourseId || 'N/A'}.
-                        Their submitted date was ${applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}.
-                        Their last update was ${applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}.
-                        `;
-        } else {
-            context += `They have not submitted an application yet. If they ask about their application, inform them they need to apply first.`;
-        }
-        
-        // Add chart data to context if user asks about trends or specific chart data
-        const chartDataString = JSON.stringify(chartData.map(d => ({
-            month: d.name,
-            submitted: d.Submitted,
-            reviewed: d.Reviewed,
-            selected: d.Selected,
-            rejected: d.Rejected
-        })));
-        context += `\n\nHere is a list of historical application data by month: ${chartDataString}. Use this data to answer questions about application trends, numbers, or performance. For example, if asked about "submitted applications in March", refer to this data.`;
-        context += `\n\nAnswer questions related to their application status, general VETA procedures, or analyze the provided application trend data. Keep answers concise, professional, and helpful. If you don't have enough information to answer a question, politely say so.`;
+      let context = `You are a helpful and friendly assistant for VETA (Vocational Education and Training Authority) application status.
+        The user's full name is ${userDetails?.fullName || userDetails?.username || 'Applicant'}. `;
 
-        initialChatPrompt.push({ role: "user", parts: [{ text: context }] });
-        initialChatPrompt.push({ role: "model", parts: [{ text: `Hello ${userDetails?.fullName || userDetails?.username || 'Applicant'}! I'm your VETA Application Assistant. How can I help you today? Feel free to ask about your application status or even about the application trends shown in the chart!` }] });
+      if (applicationDetails) {
+        context += `Their application ID is ${applicationDetails.id || 'N/A'},
+          current status is ${applicationDetails.applicationStatus || 'N/A'}.
+          They preferred center ${applicationDetails.selectedCenter || 'N/A'}.
+          If their application is SELECTED, their assigned center is ${applicationDetails.adminSelectedCenter || 'N/A'}
+          and assigned course ID is ${applicationDetails.adminSelectedCourseId || 'N/A'}.
+          Their submitted date was ${applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}.
+          Their last update was ${applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}.
+        `;
+      } else {
+        context += `They have not submitted an application yet. If they ask about their application, inform them they need to apply first.`;
+      }
+
+      // Add chart data to context if user asks about trends or specific chart data
+      const chartDataString = JSON.stringify(chartData.map(d => ({
+        month: d.name,
+        submitted: d.Submitted,
+        reviewed: d.Reviewed,
+        selected: d.Selected,
+        rejected: d.Rejected
+      })));
+      context += `\n\nHere is a list of historical application data by month: ${chartDataString}.
+        Use this data to answer questions about application trends, numbers, or performance.
+        For example, if asked about "submitted applications in March", refer to this data.`;
+      context += `\n\nAnswer questions related to their application status, general VETA procedures, or analyze the provided application trend data.
+        Keep answers concise, professional, and helpful. If you don't have enough information to answer a question, politely say so.`;
+      initialChatPrompt.push({ role: "user", parts: [{ text: context }] });
+      initialChatPrompt.push({ role: "model", parts: [{ text: `Hello ${userDetails?.fullName || userDetails?.username || 'Applicant'}! I'm your VETA Application Assistant. How can I help you today? Feel free to ask about your application status or even about the application trends shown in the chart!` }] });
     }
 
     const newUserMessage = { role: "user", parts: [{ text: chatInput }] };
@@ -807,6 +767,7 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
 
   const handleCopyDetails = () => {
     if (!applicationDetails) return;
+
     const detailsText = `
       Application ID: ${applicationDetails.id || 'N/A'}
       Full Name: ${applicationDetails.fullName || 'N/A'}
@@ -817,7 +778,7 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
       Submitted on: ${applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}
       Last Updated: ${applicationDetails.updatedAt ? new Date(applicationDetails.updatedAt).toLocaleString() : 'N/A'}
     `;
-    
+
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(detailsText.trim()).then(() => {
         setCopyMessage('Details copied!');
@@ -846,6 +807,132 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
     }
   };
 
+  // New function to handle admission letter download
+  const handleDownloadAdmission = () => {
+    if (!applicationDetails || applicationDetails.applicationStatus !== 'SELECTED') {
+      alert('Admission letter is only available for selected applicants.');
+      return;
+    }
+
+    // Generate a random reference number
+    const generateReferenceNumber = () => {
+      const prefix = 'VETA-ADM-';
+      const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase(); // 8 random alphanumeric characters
+      const timestamp = Date.now().toString().substring(7); // Last few digits of timestamp
+      return `${prefix}${randomPart}-${timestamp}`;
+    };
+
+    const referenceNumber = generateReferenceNumber();
+
+    // --- Start of hypothetical admission letter generation/download logic ---
+    // In a real application, you would likely:
+    // 1. Make an API call to your backend to generate and serve the PDF.
+    //    Example: axios.get(`/admissions/download/${applicationDetails.id}`, { responseType: 'blob' })
+    //             .then(response => {
+    //                 const url = window.URL.createObjectURL(new Blob([response.data]));
+    //                 const link = document.createElement('a');
+    //                 link.href = url;
+    //                 link.setAttribute('download', `VETA_Admission_Letter_${applicationDetails.id}.pdf`);
+    //                 document.body.appendChild(link);
+    //                 link.click();
+    //                 link.remove();
+    //             }).catch(error => {
+    //                 console.error('Error downloading admission letter:', error);
+    //                 alert('Failed to download admission letter. Please try again.');
+    //             });
+    // 2. Or, if you want to generate on the client-side, use a library like jsPDF.
+    //    Example (using jsPDF, install via `npm install jspdf`):
+    //    import jsPDF from 'jspdf';
+    //    const doc = new jsPDF();
+    //    doc.text(`VETA Admission Letter`, 10, 10);
+    //    doc.text(`Applicant Name: ${applicationDetails.fullName}`, 10, 20);
+    //    doc.text(`Assigned Center: ${applicationDetails.adminSelectedCenter}`, 10, 30);
+    //    doc.text(`Assigned Course: ${([
+    //                  { id: 1, name: 'Welding and Fabrication' }, { id: 2, name: 'Electrical Installation' },
+    //                  { id: 3, name: 'Carpentry and Joinery' }, { id: 4, name: 'Plumbing' },
+    //                  { id: 5, name: 'Tailoring and Dressmaking' }, { id: 6, name: 'Automotive Mechanics' },
+    //                  { id: 7, name: 'ICT' }, { id: 8, name: 'Hotel Management' },
+    //                ]).find(c => c.id === applicationDetails.adminSelectedCourseId)?.name || `Course ${applicationDetails.adminSelectedCourseId}`}`, 10, 40);
+    //    doc.save(`VETA_Admission_Letter_${applicationDetails.id}.pdf`);
+    // --- End of hypothetical admission letter generation/download logic ---
+
+    // For demonstration, let's simulate the download by opening a new window
+    // with a "mock" admission letter content.
+    const admissionContent = `
+      <html>
+      <head>
+          <title>VETA Admission Letter - ${applicationDetails.fullName}</title>
+          <style>
+              body { font-family: 'Arial', sans-serif; margin: 40px; line-height: 1.6; color: #333; }
+              h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
+              h2 { color: #34495e; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 20px; }
+              p { margin-bottom: 10px; }
+              .details-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              .details-table td { padding: 8px; border: 1px solid #ddd; }
+              .details-table td:first-child { font-weight: bold; width: 30%; background-color: #f9f9f9; }
+              .footer { margin-top: 50px; text-align: center; font-size: 0.9em; color: #777; }
+              .reference-number { text-align: right; font-size: 0.9em; color: #555; margin-bottom: 10px; }
+          </style>
+      </head>
+      <body>
+          <h1>VETA Admission Letter</h1>
+          <div class="reference-number">Reference Number: <strong>${referenceNumber}</strong></div>
+          <p>Dear ${applicationDetails.fullName},</p>
+          <p>We are delighted to inform you that your application for admission to Vocational Education and Training Authority (VETA) has been successful!</p>
+
+          <h2>Your Admission Details:</h2>
+          <table class="details-table">
+              <tr>
+                  <td>Application ID:</td>
+                  <td>${applicationDetails.id || 'N/A'}</td>
+              </tr>
+              <tr>
+                  <td>Full Name:</td>
+                  <td>${applicationDetails.fullName || 'N/A'}</td>
+              </tr>
+              <tr>
+                  <td>Assigned Center:</td>
+                  <td>${applicationDetails.adminSelectedCenter || 'N/A'}</td>
+              </tr>
+              <tr>
+                  <td>Assigned Course:</td>
+                  <td>${
+                    ([
+                      { id: 1, name: 'Welding and Fabrication' }, { id: 2, name: 'Electrical Installation' },
+                      { id: 3, name: 'Carpentry and Joinery' }, { id: 4, name: 'Plumbing' },
+                      { id: 5, name: 'Tailoring and Dressmaking' }, { id: 6, name: 'Automotive Mechanics' },
+                      { id: 7, name: 'ICT' }, { id: 8, name: 'Hotel Management' },
+                    ]).find(c => c.id === applicationDetails.adminSelectedCourseId)?.name || `Course ${applicationDetails.adminSelectedCourseId}`
+                  }</td>
+              </tr>
+              <tr>
+                  <td>Admission Date:</td>
+                  <td>${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+              </tr>
+          </table>
+
+          <p style="margin-top: 30px;">
+              Please be prepared to report to your assigned center on the specified enrollment date (to be communicated separately via email) with all necessary documents.
+              We look forward to welcoming you to VETA and supporting you in achieving your career aspirations.
+          </p>
+          <p>For any queries, please do not hesitate to contact the admissions office.</p>
+
+          <div class="footer">
+              <p>Sincerely,</p>
+              <p>The Admissions Team</p>
+              <p>Vocational Education and Training Authority (VETA)</p>
+          </div>
+      </body>
+      </html>
+    `;
+
+    const newWindow = window.open();
+    newWindow.document.write(admissionContent);
+    newWindow.document.close(); // Close the document to ensure all content is loaded
+    newWindow.print(); // Optional: trigger print dialog
+  };
+
+
   if (isLoading) {
     return (
       <div className="status-container d-flex align-items-center justify-content-center">
@@ -861,7 +948,7 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
     return (
       <div className="status-container d-flex align-items-center justify-content-center">
         <div className="alert alert-danger text-center alert-modern danger">
-          <FaTimesCircle className="icon" /> 
+          <FaTimesCircle className="icon" />
           <div>
             <p className="mb-1"><strong>Error:</strong> {error}</p>
             {error === 'You have not submitted an application form yet.' && (
@@ -906,7 +993,6 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
     const progress = (currentTimelineIndex / (timelineSteps.length - 1)) * 100;
     return `${progress}%`;
   };
-
 
   const getAlertMessage = () => {
     switch (currentStatus) {
@@ -997,9 +1083,9 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
             <div className="timeline">
               <div className="timeline-progress" style={{ width: getTimelineProgressWidth() }}></div>
               {timelineSteps.map((step, index) => (
-                <div 
-                  key={step.id} 
-                  className={`timeline-item 
+                <div
+                  key={step.id}
+                  className={`timeline-item
                     ${index <= currentTimelineIndex ? 'completed' : ''}
                     ${index === currentTimelineIndex ? 'active' : ''}
                   `}
@@ -1041,15 +1127,13 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                   <li className="detail-item"><strong>Preferred VETA Center:</strong> <span>{applicationDetails.selectedCenter || 'N/A'}</span></li>
                   {applicationDetails.preferredCourses && applicationDetails.preferredCourses.length > 0 && (
                     <li className="detail-item"><strong>Preferred Courses:</strong> <span>{applicationDetails.preferredCourses.map(courseId => {
-                        const course = (
-                            [
-                                { id: 1, name: 'Welding and Fabrication' }, { id: 2, name: 'Electrical Installation' },
-                                { id: 3, name: 'Carpentry and Joinery' }, { id: 4, name: 'Plumbing' },
-                                { id: 5, name: 'Tailoring and Dressmaking' }, { id: 6, name: 'Automotive Mechanics' },
-                                { id: 7, name: 'ICT' }, { id: 8, name: 'Hotel Management' },
-                            ]
-                        ).find(c => c.id === courseId);
-                        return course ? course.name : `Course ${courseId}`;
+                      const course = ([
+                        { id: 1, name: 'Welding and Fabrication' }, { id: 2, name: 'Electrical Installation' },
+                        { id: 3, name: 'Carpentry and Joinery' }, { id: 4, name: 'Plumbing' },
+                        { id: 5, name: 'Tailoring and Dressmaking' }, { id: 6, name: 'Automotive Mechanics' },
+                        { id: 7, name: 'ICT' }, { id: 8, name: 'Hotel Management' },
+                      ]).find(c => c.id === courseId);
+                      return course ? course.name : `Course ${courseId}`;
                     }).join(', ')}</span></li>
                   )}
                   {applicationDetails.adminSelectedCenter && (
@@ -1057,14 +1141,12 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                   )}
                   {applicationDetails.adminSelectedCourseId && (
                     <li className="detail-item"><strong>Assigned Course:</strong> <span>{
-                        (
-                            [
-                                { id: 1, name: 'Welding and Fabrication' }, { id: 2, name: 'Electrical Installation' },
-                                { id: 3, name: 'Carpentry and Joinery' }, { id: 4, name: 'Plumbing' },
-                                { id: 5, name: 'Tailoring and Dressmaking' }, { id: 6, name: 'Automotive Mechanics' },
-                                { id: 7, name: 'ICT' }, { id: 8, name: 'Hotel Management' },
-                            ]
-                        ).find(c => c.id === applicationDetails.adminSelectedCourseId)?.name || `Course ${applicationDetails.adminSelectedCourseId}`
+                      ([
+                        { id: 1, name: 'Welding and Fabrication' }, { id: 2, name: 'Electrical Installation' },
+                        { id: 3, name: 'Carpentry and Joinery' }, { id: 4, name: 'Plumbing' },
+                        { id: 5, name: 'Tailoring and Dressmaking' }, { id: 6, name: 'Automotive Mechanics' },
+                        { id: 7, name: 'ICT' }, { id: 8, name: 'Hotel Management' },
+                      ]).find(c => c.id === applicationDetails.adminSelectedCourseId)?.name || `Course ${applicationDetails.adminSelectedCourseId}`
                     }</span></li>
                   )}
                   <li className="detail-item"><strong>Submitted on:</strong> <span>{applicationDetails.createdAt ? new Date(applicationDetails.createdAt).toLocaleString() : 'N/A'}</span></li>
@@ -1072,6 +1154,12 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                   <li className="detail-item"><strong>Current Status Code:</strong> <span>{applicationDetails.applicationStatus || 'N/A'}</span></li>
                 </ul>
                 <div className="action-buttons">
+                  {/* Conditional Download Button */}
+                  {applicationDetails.applicationStatus === 'SELECTED' && (
+                    <button className="btn btn-primary" onClick={handleDownloadAdmission}>
+                      <FaDownload className="me-1" /> Download Admission Letter
+                    </button>
+                  )}
                   <button className="btn btn-outline-secondary" onClick={handleCopyDetails}>
                     <FaClipboard className="me-1" /> Copy All Details
                   </button>
@@ -1101,7 +1189,7 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#e9f0f8" />
                     <XAxis dataKey="name" stroke="#666" padding={{ left: 30, right: 30 }} />
                     <YAxis stroke="#666" />
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ backgroundColor: '#fff', border: '1px solid #e0e7ff', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}
                       labelStyle={{ color: '#333', fontWeight: 'bold' }}
                       itemStyle={{ color: '#555' }}
@@ -1117,66 +1205,66 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
                 </ResponsiveContainer>
               </div>
               <p className="text-muted text-center mt-3">
-                <small><FaInfoCircle className="me-1" /> This chart shows the hypothetical volume of applications at different stages over recent months. This data is for illustrative purposes.</small>
+                <small><FaInfoCircle className="me-1" /> This chart shows the hypothetical volume of applications at different stages over recent months.
+                Data is illustrative and for trend visualization purposes.</small>
               </p>
             </div>
           )}
         </div>
 
-        {/* Custom copy message display */}
-        {copyMessage && (
-          <div className={`copy-message ${copyMessage ? 'show' : ''}`}>
-            {copyMessage}
-          </div>
-        )}
-
-        {/* Support Chat Toggle Button */}
-        {!showChat && (
-          <button className="chat-toggle-btn" onClick={() => setShowChat(true)}>
-            <i className="fas fa-comments"></i>
-          </button>
-        )}
-
-        {/* Support Chat Widget */}
-        {showChat && (
-          <div className="chat-widget">
-            <div className="chat-header">
-              VETA AI Assistant
-              <button className="btn-close-chat" onClick={() => setShowChat(false)}>
-                <FaTimes />
-              </button>
-            </div>
-            <div className="chat-body" ref={chatBodyRef}>
-              {chatHistory.map((msg, index) => (
-                // Only render user/model messages, not initial prompt
-                msg.role !== 'user' || index === chatHistory.length -1 || chatHistory[index-1]?.role === 'model' ? ( 
-                    <div key={index} className={`chat-message ${msg.role} ${isChatLoading && index === chatHistory.length - 1 ? 'loading' : ''}`}>
-                        {msg.parts[0].text}
-                    </div>
-                ) : null
-              ))}
-              {isChatLoading && (
-                <div className="chat-message model loading">
-                  <FaSpinner className="fa-spin me-2" /> Typing...
-                </div>
-              )}
-            </div>
-            <div className="chat-input-area">
-              <input
-                type="text"
-                placeholder="Ask me anything..."
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyPress={(e) => { if (e.key === 'Enter') sendMessage(); }}
-                disabled={isChatLoading}
-              />
-              <button className="btn btn-primary" onClick={sendMessage} disabled={isChatLoading}>
-                <i className="fas fa-paper-plane"></i>
-              </button>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Chat Toggle Button */}
+      <button className="chat-toggle-btn" onClick={() => setShowChat(!showChat)} aria-label="Toggle Chat Widget">
+        <FaRegSmileBeam />
+      </button>
+
+      {/* Copy Message Popup */}
+      {copyMessage && (
+        <div className="position-fixed copy-message text-white">
+          {copyMessage}
+        </div>
+      )}
+
+      {/* Chat Widget */}
+      {showChat && (
+        <div className="chat-widget">
+          <div className="card-header chat-header">
+            VETA Assistant
+            <button onClick={() => setShowChat(false)} aria-label="Close Chat">
+              <FaTimes />
+            </button>
+          </div>
+          <div className="chat-body" ref={chatBodyRef}>
+            {chatHistory.map((msg, index) => (
+              // Only render user/model messages, not initial prompt
+              msg.role !== 'user' || index === chatHistory.length -1 || chatHistory[index-1]?.role === 'model' ? ( 
+                  <div key={index} className={`chat-message ${msg.role} ${isChatLoading && index === chatHistory.length - 1 ? 'loading' : ''}`}>
+                      {msg.parts[0].text}
+                  </div>
+              ) : null
+            ))}
+            {isChatLoading && (
+              <div className="chat-message model loading">
+                <FaSpinner className="fa-spin me-2" /> Typing...
+              </div>
+            )}
+          </div>
+          <div className="chat-input-area">
+            <input
+              type="text"
+              placeholder="Ask me anything..."
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyPress={(e) => { if (e.key === 'Enter') sendMessage(); }}
+              disabled={isChatLoading}
+            />
+            <button className="btn btn-primary" onClick={sendMessage} disabled={isChatLoading}>
+              <i className="fas fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

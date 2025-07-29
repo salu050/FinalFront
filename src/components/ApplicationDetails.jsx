@@ -412,7 +412,7 @@ function ApplicationDetails() {
           letterSpacing: 2,
           color: "#fff" // White color for the heading to match the image
         }}>
-          Admin Dashboard
+          Applicants Selection Panel
         </h4>
         <p className="mb-4 fw-light text-center" style={{ fontSize: "1rem", maxWidth: "600px", margin: "auto", color: "#a5b4fc" }}>
           Welcome to your <span className="fw-bold" style={{ color: "#fff" }}>powerful</span> & <span className="fw-bold" style={{ color: "#fff" }}>modern</span> administration panel. Manage application details, to select only qualified applicants, and reject those unqualified applicants to join in various programs based on their choice!
