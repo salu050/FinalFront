@@ -153,7 +153,7 @@ const Register = ({ onAuthSuccess }) => {
   const [cooldownLeft, setCooldownLeft] = useState(0);
 
   // Placeholder URLs for images and dynamic CSS injection
-  const logoUrl = "https://placehold.co/100x100/6366f1/ffffff?text=LOGO"; // Placeholder for logo.jfif
+  const logoUrl = "./logo.jfif"; // Placeholder for logo.jfif
 
   useEffect(() => {
     // Dynamically inject Bootstrap CSS link
@@ -443,7 +443,7 @@ const Register = ({ onAuthSuccess }) => {
   );
 
   // ---- Welcome Message ----
-  const welcomeText = isLogin ? "Welcome back! Please login to your account." : "Fill in your details to register.";
+  const welcomeText = isLogin ? "WWelcome back! Please login to your account." : "Fill in your details to register.";
   const typedWelcome = useTyping(welcomeText, 25);
 
   return (
