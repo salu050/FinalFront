@@ -143,7 +143,7 @@ function ApplicationDetails() {
 
   // Effect to fetch all applications
   const fetchApplications = useCallback(() => {
-    fetchData('http://localhost:8082/api/dashboard/applicants', 'Failed to fetch applicants for dashboard', setApplications, setLoadingApplications);
+    fetchData('https://localhost:8082/api/dashboard/applicants', 'Failed to fetch applicants for dashboard', setApplications, setLoadingApplications);
   }, [fetchData]);
 
   useEffect(() => {
@@ -152,7 +152,7 @@ function ApplicationDetails() {
 
   // Effect to fetch all courses for dropdown options
   useEffect(() => {
-    fetchData('http://localhost:8082/api/courses', 'Failed to fetch courses', setAllCourses);
+    fetchData('https://localhost:8082/api/courses', 'Failed to fetch courses', setAllCourses);
   }, [fetchData]);
 
   // Effect to calculate summary counts whenever applications change
@@ -183,7 +183,7 @@ function ApplicationDetails() {
 
     try {
       const response = await fetch(
-        `http://localhost:8082/api/applications/${id}/select/${courseId}/${adminSelectedCenter}`,
+        `https://localhost:8082/api/applications/${id}/select/${courseId}/${adminSelectedCenter}`,
         {
           method: 'POST',
           headers: headers
@@ -229,7 +229,7 @@ function ApplicationDetails() {
 
     try {
       const response = await fetch(
-        `http://localhost:8082/api/applications/${id}/reject`,
+        `https://localhost:8082/api/applications/${id}/reject`,
         {
           method: 'POST',
           headers: headers

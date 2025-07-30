@@ -1001,7 +1001,8 @@ const ApplicationStatus = ({ userDetails, onSubmitDetails = () => {} }) => {
           type: 'success',
           icon: <FaCheckCircle className="icon" />,
           title: 'Congratulations!',
-          message: `Your dedication has paid off! Welcome to a new chapter of learning and growth at VETA ${applicationDetails?.adminSelectedCenter || 'your assigned center'}. Please check your email for further instructions regarding enrollment and orientation.`,
+          message: `Your dedication has paid off! Welcome to a new and exciting chapter of learning and growth at the prestigious ${applicationDetails?.adminSelectedCenter || 'your assigned center'}! This is where your dreams will take flight, where innovation thrives, and where your future truly begins. Please check your email for further instructions regarding enrollment and orientation. Your path to excellence starts now!`
+,
           action: { label: 'View Enrollment Guide', icon: <FaInfoCircle />, link: '#' } // Placeholder
         };
       case 'SUBMITTED':

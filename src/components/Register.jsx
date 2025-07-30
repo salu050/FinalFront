@@ -25,7 +25,6 @@ const bubbles = [
   { left: '60%', top: '33%', size: 120, color: '#3d375a' },
   { left: '23%', top: '32%', size: 85, color: '#27325a' }
 ];
-
 const bubbleStyle = (i, offset) => ({
   position: 'absolute',
   borderRadius: '50%',
@@ -35,7 +34,6 @@ const bubbleStyle = (i, offset) => ({
   willChange: 'transform',
   transform: `translate(${offset.x}px,${offset.y}px)`
 });
-
 const styleSheet = document.createElement("style");
 styleSheet.innerHTML = `
 @keyframes pop-in {0%{ transform:translateY(60px) scale(0.8) rotate(-6deg); opacity:0;}60%{ transform:scale(1.05) rotate(3deg);}85%{ transform:scale(0.97) rotate(-1deg);}100%{transform:translateY(0) scale(1) rotate(0); opacity:1;}}
@@ -93,7 +91,6 @@ const glassDarkStyle = {
   border: '1.5px solid #6366f1',
   animation: "pop-in 1.1s cubic-bezier(.57,1.5,.53,1) both"
 };
-
 // ---- PASSWORD UTILS ----
 const passwordRequirements = [
   { req: "At least 8 characters", test: pwd => pwd.length >= 8 },
@@ -124,7 +121,6 @@ function useTyping(text, speed = 55) {
   }, [text, speed]);
   return typed;
 }
-
 // ---- MAIN COMPONENT ----
 // Register component now accepts onAuthSuccess prop for navigation
 const Register = ({ onAuthSuccess }) => {
@@ -151,10 +147,8 @@ const Register = ({ onAuthSuccess }) => {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [cooldownUntil, setCooldownUntil] = useState(null);
   const [cooldownLeft, setCooldownLeft] = useState(0);
-
   // Placeholder URLs for images and dynamic CSS injection
-  const logoUrl = "./logo.jfif"; // Placeholder for logo.jfif
-
+  const logoUrl = "https://placehold.co/100x100/6366f1/ffffff?text=LOGO"; // Placeholder for logo.jfif
   useEffect(() => {
     // Dynamically inject Bootstrap CSS link
     const bootstrapLink = document.createElement('link');
@@ -163,14 +157,11 @@ const Register = ({ onAuthSuccess }) => {
     bootstrapLink.integrity = 'sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM';
     bootstrapLink.crossOrigin = 'anonymous';
     document.head.appendChild(bootstrapLink);
-
     // Cleanup function to remove the link when the component unmounts
     return () => {
       document.head.removeChild(bootstrapLink);
     };
   }, []); // Empty dependency array ensures this runs once on mount and cleans up on unmount
-
-
   // ---- Parallax for bubbles ----
   useEffect(() => {
     const handleMouse = (e) => {
@@ -181,7 +172,6 @@ const Register = ({ onAuthSuccess }) => {
     window.addEventListener('mousemove', handleMouse);
     return () => window.removeEventListener('mousemove', handleMouse);
   }, []);
-
   // ---- Login attempts/cooldown ----
   useEffect(() => {
     const attempts = parseInt(localStorage.getItem('loginAttempts') || '0', 10);
@@ -214,7 +204,6 @@ const Register = ({ onAuthSuccess }) => {
     }, 1000);
     return () => clearInterval(interval);
   }, [cooldownUntil]);
-
   // ---- Password strength ----
   const passwordStrength = (pwd) => {
     if (!pwd) return 0;
@@ -248,7 +237,6 @@ const Register = ({ onAuthSuccess }) => {
     setConfettiActive(true);
     setTimeout(() => setConfettiActive(false), 1400);
   };
-
   // ---- Form Submission ----
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -259,7 +247,6 @@ const Register = ({ onAuthSuccess }) => {
       return;
     }
     setIsLoading(true);
-
     if (!form.username.trim()) {
       setError('Username is required.');
       setIsLoading(false);
@@ -279,12 +266,10 @@ const Register = ({ onAuthSuccess }) => {
       setInputValid(v => ({ ...v, password: false }));
       return;
     }
-
     try {
       const url = isLogin
         ? '/users/login'
         : '/users/register';
-
       const payload = isLogin
         ? { username: form.username, password: form.password }
         : {
@@ -292,14 +277,11 @@ const Register = ({ onAuthSuccess }) => {
             password: form.password,
             role: "STUDENT" // Explicitly send the role for new registrations
           };
-
       const response = await axios.post(url, payload);
       const data = response.data;
-
       setLoginAttempts(0);
       localStorage.removeItem('loginAttempts');
       localStorage.removeItem('loginCooldownUntil');
-
       if (isLogin) {
         // Only call onAuthSuccess for successful logins
         if (onAuthSuccess) {
@@ -329,7 +311,6 @@ const Register = ({ onAuthSuccess }) => {
       }
       setSuccessMorph(true);
       setTimeout(() => setSuccessMorph(false), 1000); // Morph animation duration
-
     } catch (err) {
       console.error("Submission error:", err);
       setError(err.response?.data?.message || err.message || 'An unexpected error occurred. Please check your network connection.');
@@ -337,7 +318,6 @@ const Register = ({ onAuthSuccess }) => {
     }
     setIsLoading(false);
   };
-
   // ---- Forgot Password ----
   const handleForgotPassword = async (e) => {
     e.preventDefault();
@@ -347,14 +327,18 @@ const Register = ({ onAuthSuccess }) => {
       return;
     }
     setIsLoading(true);
-    
-    // Simulate backend email verification delay
-    setResetMsg('Wait for verification in your email.');
-    setTimeout(() => {
-        setShowReset('reset'); // Change 'request' to 'reset' stage
-        setIsLoading(false);
-        setResetMsg(''); // Clear the message to prepare for new password entry
-    }, 1500);
+
+    // FIX: Make an actual API call to the backend for password reset request
+    try {
+      const response = await axios.post('/users/reset-password-request', { username: resetUsername });
+      setResetMsg('A password reset link has been sent to your email. Please check your inbox.');
+      setShowReset('reset'); // Switch to the stage where user enters new password
+    } catch (err) {
+      console.error("Forgot password request error:", err);
+      setResetMsg(err.response?.data?.message || err.message || 'Failed to send reset link. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleResetPassword = async (e) => {
@@ -372,7 +356,6 @@ const Register = ({ onAuthSuccess }) => {
     try {
       const response = await axios.post('/users/reset-password', { username: resetUsername, newPassword: resetPassword });
       const data = response.data;
-
       setResetMsg('Password reset successfully! You can now login.');
       setShowToast(true);
       confettiPop();
@@ -389,7 +372,6 @@ const Register = ({ onAuthSuccess }) => {
     }
     setIsLoading(false);
   };
-
   // ---- Floating label for inputs ----
   const floatingLabel = (label, icon, inputProps, isFocused, value, rightIcon = null, valid = null) => (
     <div className="mb-4 position-relative" style={{ minHeight: 58 }}>
@@ -441,11 +423,9 @@ const Register = ({ onAuthSuccess }) => {
       </label>
     </div>
   );
-
   // ---- Welcome Message ----
-  const welcomeText = isLogin ? "WWelcome back! Please login to your account." : "Fill in your details to register.";
+  const welcomeText = isLogin ? "Welcome back! Please login to your account." : "Fill in your details to register.";
   const typedWelcome = useTyping(welcomeText, 25);
-
   return (
     <div className="theme-dark" style={{
       position: 'relative',
@@ -723,20 +703,8 @@ const Register = ({ onAuthSuccess }) => {
                     border: 'none'
                   }}
                   disabled={isLoading}
-                  onClick={showReset === 'request'
-                    ? (e) => {
-                        e.preventDefault();
-                        if (!resetUsername.trim()) {
-                          setResetMsg('Please enter your username.');
-                          return;
-                        }
-                        setResetMsg('Wait for verification in your email.');
-                        // This timeout simulates email sending and then switches to the reset form.
-                        // In a real app, this would be triggered by a successful backend response.
-                        setTimeout(() => setShowReset('reset'), 1500);
-                      }
-                    : undefined
-                  }
+                  // FIX: Removed the onClick handler that was simulating the backend call
+                  // The onSubmit handler on the form will now correctly call handleForgotPassword or handleResetPassword
                 >
                   {isLoading ? (
                     <>
@@ -753,6 +721,7 @@ const Register = ({ onAuthSuccess }) => {
                     setShowReset(false);
                     clearUserFields();
                     setResetMsg('');
+                    setIsLogin(true);
                   }}
                 >
                   Back to Login
@@ -792,5 +761,4 @@ const Register = ({ onAuthSuccess }) => {
     </div>
   );
 };
-
 export default Register;

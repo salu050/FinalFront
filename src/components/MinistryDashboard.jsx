@@ -50,7 +50,7 @@ const statusColors = {
   Rejected: 'danger',
 };
 
-const BACKEND_BASE_URL = 'http://localhost:8080';
+const BACKEND_BASE_URL = 'https://localhost:8082';
 
 const MinistryDashboard = () => {
   const [applicants, setApplicants] = useState([]);

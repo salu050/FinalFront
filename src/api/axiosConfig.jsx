@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const instance = axios.create({
-  baseURL: 'http://localhost:8082/api', // Updated to HTTPS and new port 8443 with /api path
+  baseURL: 'https://localhost:8082/api', // Updated to HTTPS and new port 8443 with /api path
   headers: {
     'Content-Type': 'application/json',
   },
