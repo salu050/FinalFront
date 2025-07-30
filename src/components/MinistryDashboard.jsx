@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react'; // Corrected '=>' to 'from'
 import { CSVLink } from 'react-csv';
 import {
   Table,
@@ -25,7 +25,6 @@ import {
   FaUser,
   FaSort,
   FaFilter,
-  FaMoon,
   FaSearch,
   FaArrowUp,
   FaArrowDown,
@@ -44,10 +43,13 @@ const staticDarkBg = {
   transition: 'background 0.5s',
 };
 
+// Map backend status enum to Bootstrap badge colors
 const statusColors = {
-  Selected: 'success',
-  Pending: 'warning',
-  Rejected: 'danger',
+  SELECTED: 'success',
+  PENDING: 'warning', // Assuming 'PENDING' is a distinct status for 'Under Review'
+  REJECTED: 'danger',
+  SUBMITTED: 'info', // Added 'SUBMITTED' status if it comes from backend
+  'N/A': 'secondary', // For cases where status is not set
 };
 
 const BACKEND_BASE_URL = 'https://localhost:8082';
@@ -56,7 +58,7 @@ const MinistryDashboard = () => {
   const [applicants, setApplicants] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [sortKey, setSortKey] = useState('fullname');
+  const [sortKey, setSortKey] = useState('fullName'); // Default sort key, matching DTO
   const [sortAsc, setSortAsc] = useState(true);
   const [filterStatus, setFilterStatus] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
@@ -77,57 +79,97 @@ const MinistryDashboard = () => {
     setShowToast(true);
   };
 
-  const fetchApplicants = () => {
+  const fetchApplicants = async () => {
     setLoading(true);
-    fetch(`${BACKEND_BASE_URL}/api/dashboard/applicants`)
-      .then(res => res.json())
-      .then(data => {
-        setApplicants(data);
-        setLoading(false);
-        showToastNotify("Applicants data loaded successfully!");
-      })
-      .catch(() => setLoading(false));
+    const token = localStorage.getItem('jwtToken'); // Get JWT token from local storage
+
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`; // Add token to Authorization header
+    }
+
+    try {
+      const res = await fetch(`${BACKEND_BASE_URL}/api/dashboard/applicants`, { headers });
+
+      if (!res.ok) {
+        // Handle specific HTTP errors
+        if (res.status === 401 || res.status === 403) {
+          // If unauthorized or forbidden, clear token and redirect to login
+          localStorage.removeItem('jwtToken');
+          localStorage.removeItem('user');
+          window.dispatchEvent(new Event('auth-logout')); // Trigger logout in App.jsx
+          throw new Error("Authentication failed. Please log in again.");
+        }
+        const errorBody = await res.text(); // Get response body for more detail
+        throw new Error(`HTTP error! Status: ${res.status}, Message: ${errorBody || res.statusText}`);
+      }
+
+      const data = await res.json();
+      setApplicants(Array.isArray(data) ? data : []); // Ensure data is an array
+      showToastNotify("Applicants data loaded successfully!");
+    } catch (error) {
+      console.error("Error fetching applicants:", error);
+      showToastNotify(`Failed to load data: ${error.message}`);
+    } finally {
+      setLoading(false);
+      setRefreshing(false); // Ensure refreshing state is reset
+    }
   };
 
-  const selectedApplicants = applicants.filter(a => a.status === 'Selected');
-  const pendingApplicants = applicants.filter(a => a.status === 'Pending');
-  const rejectedApplicants = applicants.filter(a => a.status === 'Rejected');
+  // Filter applicants by their applicationStatus (from backend DTO)
+  const selectedApplicants = applicants.filter(a => a.applicationStatus === 'SELECTED');
+  const pendingApplicants = applicants.filter(a => a.applicationStatus === 'PENDING' || a.applicationStatus === 'SUBMITTED');
+  const rejectedApplicants = applicants.filter(a => a.applicationStatus === 'REJECTED');
+
+  // Helper to get nested or alternative property values for sorting/filtering
+  const getApplicantValue = (obj, key) => {
+    switch (key) {
+      case 'fullName': return obj.fullName || ''; // Matches DTO field
+      case 'course': return obj.course || ''; // Matches DTO field (courseNameForDisplay from backend)
+      case 'center': return obj.center || ''; // Matches DTO field (selectedCenter from backend)
+      case 'username': return obj.username || ''; // Matches DTO field
+      case 'status': return obj.applicationStatus || 'N/A'; // Matches DTO field
+      default: return obj[key] || '';
+    }
+  };
 
   const filtered = applicants
-    .filter(app =>
-      (
-        (app.fullname || app.fullName || '').toLowerCase().includes(search.toLowerCase()) ||
-        (app.course || app.courseName || '').toLowerCase().includes(search.toLowerCase()) ||
-        (app.center || '').toLowerCase().includes(search.toLowerCase()) ||
-        (app.username || '').toLowerCase().includes(search.toLowerCase())
-      )
-      && (filterStatus === 'All' || app.status === filterStatus)
-    )
+    .filter(app => {
+      const searchTermLower = search.toLowerCase();
+      return (
+        getApplicantValue(app, 'fullName').toLowerCase().includes(searchTermLower) ||
+        getApplicantValue(app, 'course').toLowerCase().includes(searchTermLower) ||
+        getApplicantValue(app, 'center').toLowerCase().includes(searchTermLower) ||
+        getApplicantValue(app, 'username').toLowerCase().includes(searchTermLower)
+      ) && (filterStatus === 'All' || getApplicantValue(app, 'status') === filterStatus);
+    })
     .sort((a, b) => {
-      const aVal = (a[sortKey] || a[sortKey.charAt(0).toUpperCase() + sortKey.slice(1)] || '').toLowerCase();
-      const bVal = (b[sortKey] || b[sortKey.charAt(0).toUpperCase() + sortKey.slice(1)] || '').toLowerCase();
+      const aVal = getApplicantValue(a, sortKey).toLowerCase();
+      const bVal = getApplicantValue(b, sortKey).toLowerCase();
       if (aVal < bVal) return sortAsc ? -1 : 1;
       if (aVal > bVal) return sortAsc ? 1 : -1;
       return 0;
     });
 
   const csvHeaders = [
-    { label: 'Full Name', key: 'fullname' },
-    { label: 'Username', key: 'username' },
+    { label: 'Full Name', key: 'fullName' }, // Use fullName
     { label: 'Course', key: 'course' },
     { label: 'Center', key: 'center' },
-    { label: 'Status', key: 'status' },
+    { label: 'Status', key: 'applicationStatus' }, // Use applicationStatus
+    { label: 'Username', key: 'username' },
   ];
 
   // Robust mapping for selected applicants for CSV export
   const selectedForCsv = applicants
-    .filter(a => (a.status || '').toLowerCase() === 'selected')
+    .filter(a => (a.applicationStatus || '').toUpperCase() === 'SELECTED')
     .map(a => ({
-      fullname: a.fullname || a.fullName || '',
-      username: a.username || '',
-      course: a.course || a.courseName || '',
-      center: a.center || '',
-      status: a.status || '',
+      fullName: getApplicantValue(a, 'fullName'),
+      course: getApplicantValue(a, 'course'),
+      center: getApplicantValue(a, 'center'),
+      applicationStatus: getApplicantValue(a, 'status'),
+      username: getApplicantValue(a, 'username'),
     }));
 
   // Copy all visible (filtered) to clipboard
@@ -136,16 +178,28 @@ const MinistryDashboard = () => {
       csvHeaders.map(h => h.label).join(','),
       ...filtered.map(app =>
         [
-          app.fullname || app.fullName || '',
-          app.username || '',
-          app.course || app.courseName || '',
-          app.center || '',
-          app.status || '',
-        ].map(v => `"${v.replace(/"/g, '""')}"`).join(',')
+          getApplicantValue(app, 'fullName'),
+          getApplicantValue(app, 'course'),
+          getApplicantValue(app, 'center'),
+          getApplicantValue(app, 'status'),
+          getApplicantValue(app, 'username'),
+        ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',') // Ensure values are strings and handle quotes
       ),
     ].join('\n');
-    await navigator.clipboard.writeText(rows);
-    showToastNotify("Visible table copied to clipboard!");
+    // Use document.execCommand('copy') as navigator.clipboard.writeText() may not work due to iFrame restrictions.
+    const tempTextArea = document.createElement('textarea');
+    tempTextArea.value = rows;
+    document.body.appendChild(tempTextArea);
+    tempTextArea.select();
+    try {
+      document.execCommand('copy');
+      showToastNotify("Visible table copied to clipboard!");
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      showToastNotify("Failed to copy to clipboard. Please try manually.");
+    } finally {
+      document.body.removeChild(tempTextArea);
+    }
   };
 
   // Scroll-to-top button logic
@@ -157,14 +211,7 @@ const MinistryDashboard = () => {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetch(`${BACKEND_BASE_URL}/api/dashboard/applicants`)
-      .then(res => res.json())
-      .then(data => {
-        setApplicants(data);
-        setRefreshing(false);
-        showToastNotify("Applicants data refreshed!");
-      })
-      .catch(() => setRefreshing(false));
+    fetchApplicants(); // Re-use the existing fetchApplicants logic
   };
 
   // Glass style for all cards and modals
@@ -283,7 +330,8 @@ const MinistryDashboard = () => {
             <Card style={glassStyle} className="text-center mb-3 shadow-sm">
               <Card.Body>
                 <Card.Title><FaChartBar /> <span className="ms-1">Courses</span></Card.Title>
-                <h3 className="display-6">{[...new Set(applicants.map(a => a.course || a.courseName))].length}</h3>
+                {/* Use 'course' which holds the display name from backend */}
+                <h3 className="display-6">{[...new Set(applicants.map(a => a.course))].length}</h3>
                 <small className="text-success">Unique courses</small>
                 <ProgressBar now={100} variant="success" style={{ height: "0.4rem", marginTop: 8 }} />
               </Card.Body>
@@ -353,9 +401,10 @@ const MinistryDashboard = () => {
                 style={glassStyle}
               >
                 <option value="All">All Status</option>
-                <option value="Selected">Selected</option>
-                <option value="Pending">Pending</option>
-                <option value="Rejected">Rejected</option>
+                <option value="SELECTED">Selected</option>
+                <option value="PENDING">Pending</option>
+                <option value="REJECTED">Rejected</option>
+                <option value="SUBMITTED">Submitted</option> {/* Added Submitted */}
               </FormControl>
             </InputGroup>
           </Col>
@@ -387,10 +436,10 @@ const MinistryDashboard = () => {
                 <tr>
                   <th>#</th>
                   <th
-                    onClick={() => { setSortKey('fullname'); setSortAsc(sk => !sk); }}
+                    onClick={() => { setSortKey('fullName'); setSortAsc(sk => !sk); }}
                     style={{ cursor: 'pointer' }}
                   >
-                    Full Name {getSortIcon('fullname')}
+                    Full Name {getSortIcon('fullName')}
                   </th>
                   <th
                     onClick={() => { setSortKey('course'); setSortAsc(sk => !sk); }}
@@ -431,11 +480,11 @@ const MinistryDashboard = () => {
                   filtered.map((app, index) => (
                     <tr key={app.id}>
                       <td>{index + 1}</td>
-                      <td>{app.fullname || app.fullName}</td>
-                      <td>{app.course || app.courseName}</td>
-                      <td>{app.center}</td>
+                      <td>{getApplicantValue(app, 'fullName')}</td>
+                      <td>{getApplicantValue(app, 'course')}</td>
+                      <td>{getApplicantValue(app, 'center')}</td>
                       <td>
-                        <Badge bg={statusColors[app.status]}>{app.status}</Badge>
+                        <Badge bg={statusColors[getApplicantValue(app, 'status')]}>{getApplicantValue(app, 'status')}</Badge>
                       </td>
                       <td>
                         <OverlayTrigger
@@ -454,32 +503,43 @@ const MinistryDashboard = () => {
                             <Dropdown.Item
                               as={CSVLink}
                               data={[{
-                                fullname: app.fullname || app.fullName || "",
-                                username: app.username || "",
-                                course: app.course || app.courseName || "",
-                                center: app.center || "",
-                                status: app.status || "",
+                                fullName: getApplicantValue(app, 'fullName'),
+                                course: getApplicantValue(app, 'course'),
+                                center: getApplicantValue(app, 'center'),
+                                applicationStatus: getApplicantValue(app, 'status'),
+                                username: getApplicantValue(app, 'username'),
                               }]}
                               headers={csvHeaders}
-                              filename={`${(app.fullname || app.fullName || 'applicant').replace(' ', '_').toLowerCase()}_report.csv`}
+                              filename={`${getApplicantValue(app, 'fullName').replace(/ /g, '_').toLowerCase()}_report.csv`}
                             >
                               <FaDownload /> Download Row
                             </Dropdown.Item>
                             <Dropdown.Item
                               onClick={async () => {
-                                await navigator.clipboard.writeText(
+                                const rowData = [
+                                  csvHeaders.map(h => h.label).join(','),
                                   [
-                                    csvHeaders.map(h => h.label).join(','),
-                                    [
-                                      app.fullname || app.fullName || '',
-                                      app.username || '',
-                                      app.course || app.courseName || '',
-                                      app.center || '',
-                                      app.status || '',
-                                    ].map(v => `"${v.replace(/"/g, '""')}"`).join(',')
-                                  ].join('\n')
-                                );
-                                showToastNotify("Applicant copied to clipboard!");
+                                    getApplicantValue(app, 'fullName'),
+                                    getApplicantValue(app, 'course'),
+                                    getApplicantValue(app, 'center'),
+                                    getApplicantValue(app, 'status'),
+                                    getApplicantValue(app, 'username'),
+                                  ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+                                ].join('\n');
+                                // Use document.execCommand('copy') as navigator.clipboard.writeText() may not work due to iFrame restrictions.
+                                const tempTextArea = document.createElement('textarea');
+                                tempTextArea.value = rowData;
+                                document.body.appendChild(tempTextArea);
+                                tempTextArea.select();
+                                try {
+                                  document.execCommand('copy');
+                                  showToastNotify("Applicant copied to clipboard!");
+                                } catch (err) {
+                                  console.error('Failed to copy text: ', err);
+                                  showToastNotify("Failed to copy to clipboard. Please try manually.");
+                                } finally {
+                                  document.body.removeChild(tempTextArea);
+                                }
                               }}
                             >
                               <FaCopy /> Copy Row

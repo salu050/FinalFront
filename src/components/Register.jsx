@@ -148,7 +148,7 @@ const Register = ({ onAuthSuccess }) => {
   const [cooldownUntil, setCooldownUntil] = useState(null);
   const [cooldownLeft, setCooldownLeft] = useState(0);
   // Placeholder URLs for images and dynamic CSS injection
-  const logoUrl = "https://placehold.co/100x100/6366f1/ffffff?text=LOGO"; // Placeholder for logo.jfif
+  const logoUrl = "./logo.jfif"; // Placeholder for logo.jfif
   useEffect(() => {
     // Dynamically inject Bootstrap CSS link
     const bootstrapLink = document.createElement('link');
@@ -424,7 +424,7 @@ const Register = ({ onAuthSuccess }) => {
     </div>
   );
   // ---- Welcome Message ----
-  const welcomeText = isLogin ? "Welcome back! Please login to your account." : "Fill in your details to register.";
+  const welcomeText = isLogin ? "WWelcome back! Please login to your account." : "Fill in your details to register.";
   const typedWelcome = useTyping(welcomeText, 25);
   return (
     <div className="theme-dark" style={{

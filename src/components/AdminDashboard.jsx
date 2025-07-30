@@ -17,7 +17,7 @@ function AdminDashboard({ onNavigateToLogin }) { // Added onNavigateToLogin prop
   const [sortDir, setSortDir] = useState('desc');
 
   // Placeholder for logo image
-  const logoUrl = "https://placehold.co/90x90/6366f1/ffffff?text=ADMIN";
+  const logoUrl = "./logo.jfif";
 
   // Metrics (derived from filtered payments)
   const totalPayments = payments.length;
