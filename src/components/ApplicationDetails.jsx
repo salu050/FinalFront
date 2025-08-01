@@ -5,11 +5,15 @@ import { faUsers, faHourglassHalf, faCheckCircle, faTimesCircle } from '@fortawe
 
 // Modern status badge component
 const StatusBadge = ({ status }) => {
+  console.log("StatusBadge received status:", status); // DEBUG: Log the status received by the badge
   if (status === 'SELECTED')
     return <span className="badge rounded-pill bg-gradient-success px-3 py-2 fs-6" style={{ background: "linear-gradient(90deg,#43e97b,#38f9d7 90%)", color: "#fff" }}>Selected</span>;
   if (status === 'REJECTED')
     return <span className="badge rounded-pill bg-gradient-danger px-3 py-2 fs-6" style={{ background: "linear-gradient(90deg,#f43f5e,#fb7185 90%)", color: "#fff" }}>Rejected</span>;
-  return <span className="badge rounded-pill bg-gradient-warning px-3 py-2 fs-6" style={{ background: "linear-gradient(90deg,#fbbf24,#f472b6 90%)", color: "#333" }}>Under Review</span>;
+  // Assuming 'SUBMITTED' is the initial status and maps to 'Under Review'
+  if (status === 'SUBMITTED' || status === 'PENDING') // Added PENDING as it might come from backend
+    return <span className="badge rounded-pill bg-gradient-warning px-3 py-2 fs-6" style={{ background: "linear-gradient(90deg,#fbbf24,#f472b6 90%)", color: "#333" }}>Under Review</span>;
+  return <span className="badge rounded-pill bg-secondary px-3 py-2 fs-6">N/A</span>; // Fallback for unknown status
 };
 
 // Animated Select Button
@@ -157,14 +161,16 @@ function ApplicationDetails() {
 
   // Effect to calculate summary counts whenever applications change
   useEffect(() => {
+    console.log("Summary useEffect triggered. Current applications state:", applications); // DEBUG: Log applications state
     const totalApplicants = applications.length;
-    // CRITICAL FIX: Changed app.application_status to app.status here
-    const underReview = applications.filter(app => app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW').length;
-    // CRITICAL FIX: Changed app.application_status to app.status here
-    const selected = applications.filter(app => app.status === 'SELECTED').length;
-    // CRITICAL FIX: Changed app.application_status to app.status here
-    const rejected = applications.filter(app => app.status === 'REJECTED').length;
+    // FIX: Changed app.status to app.applicationStatus to match DTO
+    const underReview = applications.filter(app => app.applicationStatus === 'SUBMITTED' || app.applicationStatus === 'PENDING').length;
+    // FIX: Changed app.status to app.applicationStatus to match DTO
+    const selected = applications.filter(app => app.applicationStatus === 'SELECTED').length;
+    // FIX: Changed app.status to app.applicationStatus to match DTO
+    const rejected = applications.filter(app => app.applicationStatus === 'REJECTED').length;
 
+    console.log("Calculated Summary:", { totalApplicants, underReview, selected, rejected }); // DEBUG: Log calculated summary
     setSummary({ totalApplicants, underReview, selected, rejected });
   }, [applications]);
 
@@ -202,8 +208,8 @@ function ApplicationDetails() {
       // Update local state for immediate feedback
       setApplications(apps =>
         apps.map(app =>
-          // CRITICAL FIX: Changed application_status to status here
-          app.id === id ? { ...app, status: 'SELECTED', adminSelectedCourseId: courseId, adminSelectedCenter: adminSelectedCenter } : app
+          // FIX: Changed app.status to app.applicationStatus here
+          app.id === id ? { ...app, applicationStatus: 'SELECTED', adminSelectedCourseId: courseId, adminSelectedCenter: adminSelectedCenter } : app
         )
       );
       setActionMsg('Student selected!');
@@ -248,8 +254,8 @@ function ApplicationDetails() {
       // Update local state for immediate feedback
       setApplications(apps =>
         apps.map(app =>
-          // CRITICAL FIX: Changed application_status to status here
-          app.id === id ? { ...app, status: 'REJECTED' } : app
+          // FIX: Changed app.status to app.applicationStatus here
+          app.id === id ? { ...app, applicationStatus: 'REJECTED' } : app
         )
       );
       setActionMsg('Student rejected!');
@@ -271,7 +277,7 @@ function ApplicationDetails() {
       // Search filter
       const lowerCaseSearchTerm = searchTerm.toLowerCase();
       const matchesSearch = (
-        (app.fullname && app.fullname.toLowerCase().includes(lowerCaseSearchTerm)) ||
+        (app.fullName && app.fullName.toLowerCase().includes(lowerCaseSearchTerm)) || // Use app.fullName
         (app.center && app.center.toLowerCase().includes(lowerCaseSearchTerm)) ||
         (app.educationLevel && app.educationLevel.toLowerCase().includes(lowerCaseSearchTerm)) ||
         (app.id && app.id.toString().includes(lowerCaseSearchTerm)) ||
@@ -283,11 +289,11 @@ function ApplicationDetails() {
       if (filterStatus === 'All') {
         matchesStatus = true;
       } else if (filterStatus === 'SUBMITTED') {
-        // CRITICAL FIX: Changed app.application_status to app.status here
-        matchesStatus = app.status === 'SUBMITTED' || app.status === 'UNDER_REVIEW';
+        // FIX: Changed app.status to app.applicationStatus here
+        matchesStatus = app.applicationStatus === 'SUBMITTED' || app.applicationStatus === 'PENDING';
       } else {
-        // CRITICAL FIX: Changed app.application_status to app.status here
-        matchesStatus = (app.status && app.status.toUpperCase() === filterStatus.toUpperCase());
+        // FIX: Changed app.status to app.applicationStatus here
+        matchesStatus = (app.applicationStatus && app.applicationStatus.toUpperCase() === filterStatus.toUpperCase());
       }
       return matchesSearch && matchesStatus;
     })
@@ -509,7 +515,7 @@ function ApplicationDetails() {
                 filteredAndSortedApplications.map(app => (
                   <tr key={app.id} className={animRow === app.id ? "modern-row-anim" : ""}>
                     <td>{app.id}</td>
-                    <td className="fw-semibold" style={{ letterSpacing: 1 }}>{app.fullname}</td>
+                    <td className="fw-semibold" style={{ letterSpacing: 1 }}>{app.fullName}</td> {/* FIX APPLIED HERE */}
                     <td style={{ fontWeight: 500 }}>{app.educationLevel}</td>
                     <td style={{ fontWeight: 500 }}>{app.center}</td>
                     <td>
@@ -522,8 +528,8 @@ function ApplicationDetails() {
                             [app.id]: e.target.value,
                           })
                         }
-                        // CRITICAL FIX: Changed app.application_status to app.status here
-                        disabled={app.status === 'SELECTED' || app.status === 'REJECTED'}
+                        // FIX: Changed app.status to app.applicationStatus here
+                        disabled={app.applicationStatus === 'SELECTED' || app.applicationStatus === 'REJECTED'}
                         style={{
                           background: "#1a2236",
                           borderRadius: "0.7rem",
@@ -550,17 +556,17 @@ function ApplicationDetails() {
                     {/* Display Submission Date */}
                     <td>{app.createdAt ? new Date(app.createdAt).toLocaleDateString() : 'N/A'}</td>
                     <td>
-                      {/* CRITICAL FIX: Changed app.application_status to app.status here */}
-                      <StatusBadge status={app.status} />
+                      {/* FIX: Changed app.status to app.applicationStatus here */}
+                      <StatusBadge status={app.applicationStatus} />
                     </td>
                     <td className="text-center">
                       <AnimatedButton
                         className="btn-success btn-sm me-2"
                         onClick={() => handleSelectStudent(app.id, app.center)}
-                        // CRITICAL FIX: Changed app.application_status to app.status here
+                        // FIX: Changed app.status to app.applicationStatus here
                         disabled={
-                          app.status === 'SELECTED' ||
-                          app.status === 'REJECTED' ||
+                          app.applicationStatus === 'SELECTED' ||
+                          app.applicationStatus === 'REJECTED' ||
                           !selectedCourse[app.id]
                         }
                         style={{
@@ -574,8 +580,8 @@ function ApplicationDetails() {
                       <AnimatedButton
                         className="btn-danger btn-sm"
                         onClick={() => handleRejectStudent(app.id)}
-                        // CRITICAL FIX: Changed app.application_status to app.status here
-                        disabled={app.status === 'REJECTED' || app.status === 'SELECTED'}
+                        // FIX: Changed app.status to app.applicationStatus here
+                        disabled={app.applicationStatus === 'REJECTED' || app.applicationStatus === 'SELECTED'}
                         style={{
                           background: "linear-gradient(90deg,#f43f5e,#fb7185 90%)",
                           border: "none",
