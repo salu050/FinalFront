@@ -53,7 +53,7 @@ const ApplicationForm = ({ onSubmitDetails, submitted, userDetails }) => {
   const [isSubmitted, setIsSubmitted] = useState(submitted);
 
   // Placeholder for logo URL
-  const logoUrl = "https://placehold.co/90x90/6366f1/ffffff?text=FORM";
+  const logoUrl = "./logo.jfif";
 
   // Dynamic CSS Injection for Bootstrap and Font Awesome
   useEffect(() => {
