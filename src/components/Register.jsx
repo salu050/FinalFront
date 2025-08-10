@@ -13,7 +13,7 @@ import {
   FaSun
 } from 'react-icons/fa';
 import confetti from 'canvas-confetti';
-import axios from '../api/axiosConfig.jsx'; // IMPORTANT: Import the configured axios instance
+import axios from '../api/axiosConfig.jsx';
 
 // ---- BUBBLES AND ANIMATION STYLES ----
 const bubbles = [
@@ -122,7 +122,6 @@ function useTyping(text, speed = 55) {
   return typed;
 }
 // ---- MAIN COMPONENT ----
-// Register component now accepts onAuthSuccess prop for navigation
 const Register = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [form, setForm] = useState({ username: '', password: '' });
@@ -147,22 +146,18 @@ const Register = ({ onAuthSuccess }) => {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [cooldownUntil, setCooldownUntil] = useState(null);
   const [cooldownLeft, setCooldownLeft] = useState(0);
-  // Placeholder URLs for images and dynamic CSS injection
-  const logoUrl = "./logo.jfif"; // Placeholder for logo.jfif
+  const logoUrl = "./logo.jfif";
   useEffect(() => {
-    // Dynamically inject Bootstrap CSS link
     const bootstrapLink = document.createElement('link');
     bootstrapLink.href = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css';
     bootstrapLink.rel = 'stylesheet';
     bootstrapLink.integrity = 'sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM';
     bootstrapLink.crossOrigin = 'anonymous';
     document.head.appendChild(bootstrapLink);
-    // Cleanup function to remove the link when the component unmounts
     return () => {
       document.head.removeChild(bootstrapLink);
     };
-  }, []); // Empty dependency array ensures this runs once on mount and cleans up on unmount
-  // ---- Parallax for bubbles ----
+  }, []);
   useEffect(() => {
     const handleMouse = (e) => {
       const x = (e.clientX / window.innerWidth - 0.5) * 24;
@@ -172,7 +167,6 @@ const Register = ({ onAuthSuccess }) => {
     window.addEventListener('mousemove', handleMouse);
     return () => window.removeEventListener('mousemove', handleMouse);
   }, []);
-  // ---- Login attempts/cooldown ----
   useEffect(() => {
     const attempts = parseInt(localStorage.getItem('loginAttempts') || '0', 10);
     const cooldown = localStorage.getItem('loginCooldownUntil');
@@ -204,7 +198,6 @@ const Register = ({ onAuthSuccess }) => {
     }, 1000);
     return () => clearInterval(interval);
   }, [cooldownUntil]);
-  // ---- Password strength ----
   const passwordStrength = (pwd) => {
     if (!pwd) return 0;
     let score = 0;
@@ -237,7 +230,6 @@ const Register = ({ onAuthSuccess }) => {
     setConfettiActive(true);
     setTimeout(() => setConfettiActive(false), 1400);
   };
-  // ---- Form Submission ----
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -273,19 +265,18 @@ const Register = ({ onAuthSuccess }) => {
       const payload = isLogin
         ? { username: form.username, password: form.password }
         : {
-            username: form.username,
-            password: form.password,
-            role: "STUDENT" // Explicitly send the role for new registrations
-          };
+          username: form.username,
+          password: form.password,
+          role: "STUDENT"
+        };
       const response = await axios.post(url, payload);
       const data = response.data;
       setLoginAttempts(0);
       localStorage.removeItem('loginAttempts');
       localStorage.removeItem('loginCooldownUntil');
       if (isLogin) {
-        // Only call onAuthSuccess for successful logins
         if (onAuthSuccess) {
-          onAuthSuccess(data); // Pass the full user data including token and hasPaidApplicationFee
+          onAuthSuccess(data);
         }
         setSuccess('Login successful!');
         setShowToast(true);
@@ -296,29 +287,40 @@ const Register = ({ onAuthSuccess }) => {
         setTimeout(() => setShowWelcome(false), 1700);
         setTimeout(() => setShowRocket(false), 1200);
       } else {
-        // For successful registration, show success message and switch to login form
         setSuccess('Account created successfully! Please log in.');
         setShowToast(true);
         confettiPop();
-        // Clear form fields after successful registration
         clearUserFields();
         setTimeout(() => {
-          setIsLogin(true); // Switch to login view
-          setSuccess(''); // Clear success message after switching
+          setIsLogin(true);
+          setSuccess('');
           setShowToast(false);
           setSuccessMorph(false);
-        }, 2000); // Give user time to read success message
+        }, 2000);
       }
       setSuccessMorph(true);
-      setTimeout(() => setSuccessMorph(false), 1000); // Morph animation duration
+      setTimeout(() => setSuccessMorph(false), 1000);
     } catch (err) {
       console.error("Submission error:", err);
-      setError(err.response?.data?.message || err.message || 'An unexpected error occurred. Please check your network connection.');
-      setSuccessMorph(false); // Ensure morph resets on error
+      const errorMessage = err.response?.data?.message || err.message || 'An unexpected error occurred. Please check your network connection.';
+      setError(errorMessage);
+      setSuccessMorph(false);
+
+      if (isLogin) {
+        const newAttempts = loginAttempts + 1;
+        setLoginAttempts(newAttempts);
+        localStorage.setItem('loginAttempts', newAttempts.toString());
+        if (newAttempts >= 3) {
+          const cooldownDuration = 60 * 1000; // 60 seconds
+          const cooldownTime = Date.now() + cooldownDuration;
+          setCooldownUntil(cooldownTime);
+          localStorage.setItem('loginCooldownUntil', cooldownTime.toString());
+          setError(`Too many failed attempts. Please wait 60 seconds before trying again.`);
+        }
+      }
     }
     setIsLoading(false);
   };
-  // ---- Forgot Password ----
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     setResetMsg('');
@@ -327,12 +329,10 @@ const Register = ({ onAuthSuccess }) => {
       return;
     }
     setIsLoading(true);
-
-    // FIX: Make an actual API call to the backend for password reset request
     try {
       const response = await axios.post('/users/reset-password-request', { username: resetUsername });
       setResetMsg('A password reset link has been sent to your email. Please check your inbox.');
-      setShowReset('reset'); // Switch to the stage where user enters new password
+      setShowReset('reset');
     } catch (err) {
       console.error("Forgot password request error:", err);
       setResetMsg(err.response?.data?.message || err.message || 'Failed to send reset link. Please try again.');
@@ -340,7 +340,6 @@ const Register = ({ onAuthSuccess }) => {
       setIsLoading(false);
     }
   };
-
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setResetMsg('');
@@ -372,7 +371,6 @@ const Register = ({ onAuthSuccess }) => {
     }
     setIsLoading(false);
   };
-  // ---- Floating label for inputs ----
   const floatingLabel = (label, icon, inputProps, isFocused, value, rightIcon = null, valid = null) => (
     <div className="mb-4 position-relative" style={{ minHeight: 58 }}>
       <span style={{
@@ -423,7 +421,6 @@ const Register = ({ onAuthSuccess }) => {
       </label>
     </div>
   );
-  // ---- Welcome Message ----
   const welcomeText = isLogin ? "WWelcome back! Please login to your account." : "Fill in your details to register.";
   const typedWelcome = useTyping(welcomeText, 25);
   return (
@@ -435,7 +432,6 @@ const Register = ({ onAuthSuccess }) => {
       overflow: 'hidden',
       background: '#23284b'
     }}>
-      {/* Animated background bubbles */}
       <div style={{
         minHeight: '100vh',
         width: '100vw',
@@ -464,7 +460,6 @@ const Register = ({ onAuthSuccess }) => {
           />
         ))}
       </div>
-      {/* Toast notification */}
       {showToast && (
         <div className="position-fixed top-0 end-0 m-4 toast show" style={{ zIndex: 9999, minWidth: 260 }}>
           <div className={`toast-header ${success ? 'bg-success' : 'bg-danger'} text-white`}>
@@ -476,7 +471,6 @@ const Register = ({ onAuthSuccess }) => {
           </div>
         </div>
       )}
-      {/* Welcome animation */}
       {showWelcome && (
         <div className="position-fixed top-50 start-50 translate-middle d-flex flex-column align-items-center" style={{zIndex:9999, animation: 'welcomePop 1.2s'}}>
           <FaRegSmileBeam style={{fontSize: 72, color: "#06b6d4", animation: "pop-in 0.7s cubic-bezier(.57,1.5,.53,1) both"}} />
@@ -485,13 +479,11 @@ const Register = ({ onAuthSuccess }) => {
           </h2>
         </div>
       )}
-      {/* Rocket animation for login */}
       {showRocket && (
         <div className="position-fixed bottom-0 start-50 translate-middle-x" style={{zIndex:8888, pointerEvents:"none"}}>
           <FaRocket style={{fontSize: 46, color: "#38f9d7", animation: "rocket 1.1s cubic-bezier(.32,1.52,.53,1.04) both"}} />
         </div>
       )}
-      {/* Main form card */}
       <div className="col-12 col-md-8 col-lg-5 d-flex align-items-center justify-content-center"
         style={{ minHeight: '100vh', zIndex: 2, position: 'relative' }}>
         <div className="card border-0 shadow-lg p-4 w-100" style={glassDarkStyle}>
@@ -703,8 +695,6 @@ const Register = ({ onAuthSuccess }) => {
                     border: 'none'
                   }}
                   disabled={isLoading}
-                  // FIX: Removed the onClick handler that was simulating the backend call
-                  // The onSubmit handler on the form will now correctly call handleForgotPassword or handleResetPassword
                 >
                   {isLoading ? (
                     <>
@@ -722,6 +712,7 @@ const Register = ({ onAuthSuccess }) => {
                     clearUserFields();
                     setResetMsg('');
                     setIsLogin(true);
+                    setShowToast(false);
                   }}
                 >
                   Back to Login
